@@ -65,13 +65,18 @@ class FlowEvent:
 
 @dataclass
 class DetectionResult:
-    """Represents the ML model inference output from Member 1's model."""
-    attack_type: str = "BENIGN"
+    """Represents the ML model inference output from Member 1's model (+ optional SOAR policy)."""
+    attack_type: str = "BENIGN"  # effective label used by SOAR (may be policy-overridden)
     confidence: float = 0.0
     probabilities: Dict[str, float] = field(default_factory=dict)
     model_version: str = "1.0.0"
     inference_time_ms: float = 0.0
     is_anomaly: bool = False
+    # Live trust layer (task 4) — preserves frozen-model output when policy fires
+    ml_attack_type: str = ""
+    ml_confidence: float = 0.0
+    policy_applied: bool = False
+    policy_reason: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

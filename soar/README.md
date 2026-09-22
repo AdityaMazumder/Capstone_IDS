@@ -3,10 +3,12 @@
 > **Role: Member 3 — Multi-Agent Orchestrator & SOAR Lead**  
 > Package path: `Capstone/soar/` (renamed from `Multi-Model Architecture/`).
 
-## Phase-1 model integration
+## NIDS model integration (v2 — frozen)
 
 Detection uses `adapters/cic_xgb_adapter.py` → Capstone `models/sentinel_xgb_v2.pkl`  
 (77 CIC features, `label_encoder_v2.pkl`, **no scaler**). Dataset: **CSE-CIC-IDS2018**-style multiclass + hybrid `dst_port` override.
+
+Canonical freeze note: `../docs/ML_Package_v2.md`.
 
 
 ---
@@ -95,10 +97,9 @@ sentinel-ai/
 │   ├── db_manager.py         # Thread-safe SQLite persistence and analytical queries for dashboard
 │   └── __init__.py
 │
-├── models/                   # Member 1 ML artifacts
-│   ├── model.pkl             # Trained Classifier
-│   ├── scaler.pkl            # Feature Scaler
-│   └── feature_names.json    # Feature vector ordering
+├── models/                   # Capstone root models/ (not this folder) — Member 1 v2 artefacts
+│                             # sentinel_xgb_v2.pkl, label_encoder_v2.pkl, feature_columns_v2.pkl
+│                             # Loaded via adapters/cic_xgb_adapter.py — no scaler.pkl
 │
 ├── contracts/
 │   └── teammate_contracts.md # Standardized API specifications for Members 1, 2, and 4

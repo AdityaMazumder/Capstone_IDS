@@ -1,7 +1,8 @@
 """
 SentinelAI - Detection Agent (ML Inference Engine)
 
-Prefer Phase-1 CIC XGBoost via CicXgbAdapter (77 features, no scaler).
+Prefer CIC XGBoost via CicXgbAdapter (77 features, no scaler).
+Applies live OOD / confidence policy after ML (SOAR task 4).
 Falls back to heuristics only if artefacts are missing.
 """
 
@@ -11,11 +12,12 @@ import sys
 import time
 import logging
 from typing import Dict, Any, Optional
-import numpy as np
 
 from agents.base_agent import BaseAgent
 from core.schemas import FlowEvent, DetectionResult
 from core.event_bus import EventBus, Event
+from rules.ood_policy import OODPolicy
+from rules.policy_engine import PolicyEngine
 
 logger = logging.getLogger("SentinelAI.DetectionAgent")
 
@@ -37,17 +39,29 @@ class DetectionAgent(BaseAgent):
         scaler_path: Optional[str] = None,
         features_path: Optional[str] = None,
         event_bus: Optional[EventBus] = None,
+        policy_engine: Optional[PolicyEngine] = None,
+        ood_policy: Optional[OODPolicy] = None,
     ):
         super().__init__(name="DetectionAgent", event_bus=event_bus)
-        # Optional overrides kept for CLI compatibility; adapter uses Capstone/models by default
         self._model_override = model_path
         self.scaler_path = scaler_path
         self.features_path = features_path
+        self._policy_engine = policy_engine
+        self.ood_policy = ood_policy
 
         self.adapter: Optional[CicXgbAdapter] = None
         self.is_ml_loaded: bool = False
 
     def _on_initialize(self) -> None:
+        if self.ood_policy is None:
+            pe = self._policy_engine or PolicyEngine()
+            cfg = (pe.policies or {}).get("ood_policy", {})
+            self.ood_policy = OODPolicy(cfg)
+            logger.info(
+                "OOD policy loaded (enabled=%s, auth_ports=%s)",
+                self.ood_policy.enabled,
+                sorted(self.ood_policy.auth_ports),
+            )
         self.load_model()
         if self.event_bus:
             self.event_bus.subscribe("flow.ingested", self.process, priority=2, agent_name=self.name)
@@ -102,8 +116,43 @@ class DetectionAgent(BaseAgent):
         else:
             detection = self._predict_heuristic(flow)
 
+        detection = self._apply_ood_policy(flow, detection)
+
         elapsed_ms = (time.perf_counter() - start_time) * 1000.0
         detection.inference_time_ms = round(elapsed_ms, 3)
+        return detection
+
+    def _apply_ood_policy(self, flow: FlowEvent, detection: DetectionResult) -> DetectionResult:
+        """Preserve ML fields; optionally override effective attack_type for SOAR."""
+        if detection.ml_attack_type == "":
+            detection.ml_attack_type = detection.attack_type
+            detection.ml_confidence = detection.confidence
+
+        if self.ood_policy is None:
+            return detection
+
+        decision = self.ood_policy.evaluate(
+            flow,
+            ml_label=detection.ml_attack_type or detection.attack_type,
+            ml_confidence=float(detection.ml_confidence or detection.confidence),
+            probabilities=detection.probabilities,
+        )
+        if not decision.override:
+            return detection
+
+        detection.attack_type = decision.attack_type
+        detection.confidence = round(decision.confidence, 4)
+        detection.is_anomaly = True
+        detection.policy_applied = True
+        detection.policy_reason = decision.reason
+        detection.model_version = f"{detection.model_version}+ood_policy"
+        probs = dict(detection.probabilities or {})
+        probs[decision.attack_type] = max(
+            float(probs.get(decision.attack_type, 0.0)),
+            decision.confidence,
+        )
+        detection.probabilities = probs
+        logger.info("OOD policy applied: %s", decision.reason)
         return detection
 
     def _predict_ml(self, flow: FlowEvent) -> DetectionResult:
@@ -112,7 +161,6 @@ class DetectionAgent(BaseAgent):
             assert self.adapter is not None
             raw = dict(flow.raw_features or {})
 
-            # Allow short schema keys only as last-resort fillers (not a substitute for 77 cols)
             short_aliases = {
                 "Flow Duration": flow.flow_duration,
                 "Tot Fwd Pkts": flow.tot_fwd_pkts,
@@ -131,14 +179,15 @@ class DetectionAgent(BaseAgent):
             for cic_name, val in short_aliases.items():
                 raw.setdefault(cic_name, val)
 
-            # Model uses 77 CIC cols only; dst_port is a hybrid post-hoc override.
             label, confidence, prob_dict = self.adapter.predict(raw, dst_port=flow.dst_port)
             return DetectionResult(
                 attack_type=label,
                 confidence=round(confidence, 4),
                 probabilities=prob_dict,
-                model_version="CIC_XGB_Phase1_v1_hybrid",
+                model_version="CIC_XGB_v2_hybrid",
                 is_anomaly=not CicXgbAdapter.is_benign(label),
+                ml_attack_type=label,
+                ml_confidence=round(confidence, 4),
             )
         except Exception as exc:
             logger.error("ML inference failed: %s. Falling back to heuristic.", exc)
@@ -154,6 +203,8 @@ class DetectionAgent(BaseAgent):
                 probabilities={"PortScan": confidence, "Benign": round(1.0 - confidence, 4)},
                 model_version="Heuristic_v1",
                 is_anomaly=True,
+                ml_attack_type="PortScan",
+                ml_confidence=round(confidence, 4),
             )
 
         if flow.flow_bytes_s > 50000.0 or flow.flow_pkts_s > 400.0 or flow.tot_fwd_pkts > 500:
@@ -164,6 +215,8 @@ class DetectionAgent(BaseAgent):
                 probabilities={"DDoS": confidence, "Benign": round(1.0 - confidence, 4)},
                 model_version="Heuristic_v1",
                 is_anomaly=True,
+                ml_attack_type="DDoS",
+                ml_confidence=round(confidence, 4),
             )
 
         if flow.dst_port in (22, 21, 3389, 445) and flow.flow_duration < 3.0 and flow.tot_fwd_pkts >= 5:
@@ -177,6 +230,8 @@ class DetectionAgent(BaseAgent):
                 probabilities={label: confidence, "Benign": 0.09},
                 model_version="Heuristic_v1",
                 is_anomaly=True,
+                ml_attack_type=label,
+                ml_confidence=confidence,
             )
 
         return DetectionResult(
@@ -185,4 +240,6 @@ class DetectionAgent(BaseAgent):
             probabilities={"Benign": 0.97},
             model_version="Heuristic_v1",
             is_anomaly=False,
+            ml_attack_type="Benign",
+            ml_confidence=0.97,
         )

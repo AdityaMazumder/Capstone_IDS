@@ -64,7 +64,11 @@ class SentinelOrchestrator:
 
         # Instantiate all 11 specialist agents
         self.packet_agent = PacketAgent(event_bus=self.event_bus)
-        self.detection_agent = DetectionAgent(model_path=model_path, event_bus=self.event_bus)
+        self.detection_agent = DetectionAgent(
+            model_path=model_path,
+            event_bus=self.event_bus,
+            policy_engine=self.policy_engine,
+        )
         self.threat_agent = ThreatAnalysisAgent(policy_engine=self.policy_engine, event_bus=self.event_bus)
         self.risk_agent = RiskAssessmentAgent(policy_engine=self.policy_engine, event_bus=self.event_bus)
         self.decision_agent = DecisionAgent(policy_engine=self.policy_engine, event_bus=self.event_bus)

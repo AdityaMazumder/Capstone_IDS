@@ -7,8 +7,10 @@ xgboost>=2.0.0
 joblib>=1.3.0
 matplotlib>=3.7.0
 
-# Live capture (optional until lab)
+# Live capture / CIC-compatible flow export (optional until lab)
 scapy>=2.5.0
+cicflowmeter>=0.5.0
+scipy>=1.11.0
 
 # Shared with SOAR
 pyyaml>=6.0.1
