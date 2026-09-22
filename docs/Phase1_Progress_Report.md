@@ -1,12 +1,16 @@
 # SentinelAI — Phase 1 Progress Report
 
+> **Archive note (Sep 2026):** This report documents the original **3-class** offline baseline.  
+> The **shipping NIDS package is now v2 (6-class)** — see `docs/ML_Package_v2.md` and `docs/features_list.md`.  
+> Artefacts named `sentinel_xgb.pkl` / `label_encoder.pkl` / `feature_columns.pkl` in sections below were superseded by `*_v2.pkl`.
+
 **Project:** SentinelAI — Machine Learning based Network Intrusion Detection System  
 **Programme:** BTech Computer Science & Engineering (Final Year)  
 **Period covered:** Dataset study, EDA, preprocessing, baseline ML, robustness checks, model save  
 **Date:** August 2026  
 **Status:** Phase 1 (data + supervised baseline) complete. Live packet capture is **not** started.
 
-This document records **what has actually been implemented and measured**. Planned components (dashboard, response engine, HIDS, live capture) are listed only as future work.
+This document records **what has actually been implemented and measured** for the 3-class phase. Planned components (dashboard, response engine, HIDS, live capture) are listed only as future work.
 
 ---
 

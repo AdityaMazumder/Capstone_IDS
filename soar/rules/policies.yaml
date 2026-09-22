@@ -20,7 +20,7 @@ whitelists:
     - "10.10.0.0/16"
 
 # Base Attack Weights for Risk Calculation (Scale 0.0 to 10.0)
-# Include Phase-1 CIC label spellings (Benign / FTP-BruteForce / SSH-Bruteforce)
+# Include v2 CIC label spellings (Benign / Botnet / DDoS / DoS / FTP-BruteForce / SSH-Bruteforce)
 base_attack_weights:
   DDoS: 9.0
   Botnet: 9.0
@@ -153,3 +153,31 @@ mitre_mappings:
     technique_name: "Authorized Baseline Traffic"
     tactic: "Legitimate"
     description: "Normal authorized communications."
+
+# ==========================================================
+# Live OOD / confidence policy (SOAR task 4)
+# Escalates when frozen CIC ML says Benign but live flow looks OOD
+# (auth ports, unusual TCP window, SYN activity, burst velocity).
+# Does not retrain the model — preserves ml_attack_type on DetectionResult.
+# ==========================================================
+ood_policy:
+  enabled: true
+  apply_when_ml_benign: true
+  auth_ports: [21, 22, 3389, 445]
+  port_label_map:
+    22: SSH-Bruteforce
+    21: FTP-BruteForce
+    3389: BruteForce
+    445: BruteForce
+  min_fwd_pkts: 2
+  min_syn_flags: 1
+  # Require this many "strong" signals beyond merely hitting an auth port
+  min_signals: 2
+  override_confidence: 0.78
+  # CIC SSH training windows; modern Linux often uses 64240
+  known_cic_init_windows: [0, 241, 8192, 26883, 29200, 65535]
+  unusual_init_win_min: 40000
+  velocity_window_seconds: 60
+  velocity_min_hits: 3
+  # Near-certain Benign on auth traffic is treated as a smell when paired with SYN/fwd
+  max_ml_benign_confidence_to_trust: 0.999

@@ -7,7 +7,9 @@ This document defines the interface specifications and contract protocols for pa
 ---
 
 ## 1. Member 1 Contract (Machine Learning Lead)
-**What Member 1 Provides (Phase 1 — actual artefacts):**
+**What Member 1 Provides (NIDS ML Package v2 — FROZEN):**
+
+Canonical freeze write-up: `docs/ML_Package_v2.md`.
 
 | File | Role |
 |------|------|
@@ -17,7 +19,8 @@ This document defines the interface specifications and contract protocols for pa
 
 SOAR loads these via `soar/adapters/cic_xgb_adapter.py`.  
 Do **not** require `scaler.pkl` for this tree model. Dataset citation: **CSE-CIC-IDS2018**-style multiclass (`cic_multiclass_clean.csv`).
-Optional hybrid: pass `dst_port` into `adapter.predict(...)` to resolve DoS ↔ FTP/SSH swaps (port is not a model feature).
+
+**Hybrid (required for deploy):** pass `dst_port` into `adapter.predict(...)` (or set `FlowEvent.dst_port`) so DoS ↔ FTP/SSH swaps can be resolved. Port is **never** part of the 77-dim training vector.
 
 ### Python Model API (through adapter):
 ```python
@@ -25,11 +28,12 @@ from soar.adapters import CicXgbAdapter
 
 adapter = CicXgbAdapter()
 adapter.load()
-label, confidence, probs = adapter.predict(raw_features_dict_77)
+# Prefer explicit dst_port for hybrid override
+label, confidence, probs = adapter.predict(raw_features_dict_77, dst_port=21)
 ```
 
-Legacy short `feature_names.json` sample contract is obsolete for Phase-1 NIDS.  
-Live flows must populate `FlowEvent.raw_features` with the 77 CIC keys (`nids/feature_extractor.py`).
+Legacy short `feature_names.json` / `model.pkl` / `scaler.pkl` sample contracts are obsolete.  
+Live flows must populate `FlowEvent.raw_features` with the 77 CIC keys (`nids/feature_extractor.py`) **and** keep `dst_port` on the flow for hybrid policy.
 
 ---
 

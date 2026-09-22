@@ -1,10 +1,12 @@
 # SentinelAI — Project Gameplan & Blueprint
 
-**Status date:** September 2026  
+**Status date:** September 2026 (ML package v2 frozen)  
 **Vision:** Hybrid **NIDS + HIDS + multi-agent SOAR + explainable alerts** for Windows  
 **Repo:** `AvaneshJ/Capstone_IDS` (SSH: `git@github-personal:…`)
 
 This document is the working blueprint from **today’s codebase** to the full platform in the new problem statement. It replaces the old “NIDS-only offline CSV” end goal without throwing away Phase 1 or the multi-agent work already on GitHub.
+
+**ML freeze:** Offline NIDS is closed at **v2 (6-class)** — see `docs/ML_Package_v2.md`. Next critical path is live capture / feature bridge, not more training.
 
 ---
 
@@ -18,19 +20,19 @@ Detect **network attacks** and **host malware behaviour** on Windows, explain th
 
 | Area | Location | Reality check |
 |------|----------|----------------|
-| Offline NIDS ML (3-class) | `ml/`, `models/` | XGBoost + encoder + **77 features (no `Dst Port`)** on CSE-CIC-**IDS2018**-style brute-force data (Benign / FTP / SSH). Cite **2018**, not 2017, in pitches. |
-| Robustness story | `docs/Phase1_Progress_Report.md` | Experiments A–C, port-rule baseline, false-alarm argument |
-| Feature contract | `docs/features_list.md`, `models/feature_columns.pkl` | Canonical 77-column order for live inference |
-| Multi-agent SOAR skeleton | `Multi-Model Architecture/` | Packet → Detection → Threat → Risk → Decision → Firewall → Alert → Logging → Report (+ LLM agent) |
-| Policies / SQLite / FastAPI stub | `rules/`, `database/`, `api/` | Present; need wiring to **real** models and live inputs |
-| Demo path | `demo_runner.py`, `main.py` | Good for supervisor walkthrough of agent pipeline |
+| Offline NIDS ML (**v2, 6-class, FROZEN**) | `ml/`, `models/`, `docs/ML_Package_v2.md` | XGBoost + encoder + **77 features (no `Dst Port`)** on CSE-CIC-**IDS2018**-style multiclass: Benign / Botnet / DDoS / DoS / FTP / SSH. Hybrid `dst_port` override in adapter. Cite **2018**, not 2017. |
+| Phase-1 robustness story (3-class archive) | `docs/Phase1_Progress_Report.md` | Experiments A–C, port-rule baseline; historical only |
+| Feature contract | `docs/features_list.md`, `models/feature_columns_v2.pkl` | Canonical 77-column order for live inference |
+| Multi-agent SOAR + real model | `soar/` | Packet → Detection (CicXgbAdapter) → Threat → Risk → Decision → Firewall → Alert → Logging → Report (+ LLM) |
+| Policies / SQLite / FastAPI stub | `soar/rules/`, `soar/database/`, `soar/api/` | Wired to v2 model on CSV/demo; need **live** inputs |
+| Demo path | `soar/demo_real_model.py`, `soar/demo_runner.py`, `soar/main.py` | Supervisor walkthrough of agent pipeline |
 
-### Critical gap (integration)
+### Critical gap (integration) — updated
 
-Member-3 contracts expect things like `model.pkl`, `scaler.pkl`, `feature_names.json` and a **short** feature list.  
-Member-1 artefacts are `sentinel_xgb.pkl`, `label_encoder.pkl`, `feature_columns.pkl` (**77** CIC names, **no scaler** for trees).
+Legacy short contracts (`model.pkl`, `scaler.pkl`, `feature_names.json`) are **obsolete**.  
+Shipping artefacts: `sentinel_xgb_v2.pkl`, `label_encoder_v2.pkl`, `feature_columns_v2.pkl` via `soar/adapters/cic_xgb_adapter.py`.
 
-**Blueprint rule:** one adapter layer that maps live/flow dict → 77-vector → `sentinel_xgb.pkl`, instead of retraining just to match the sample contract.
+**Remaining gap:** live packets/flows → 77 CIC keys + `dst_port` → orchestrator (not offline CSV).
 
 ---
 
@@ -70,12 +72,12 @@ Do **not** claim all attack types on day one. Expand labels only when you have d
 
 | Tier | Capability | When |
 |------|------------|------|
-| **T0 — Now** | Offline 3-class NIDS + agent demo on synthetic/CSV flows | Done / wire model |
+| **T0 — Done** | Offline **6-class** NIDS v2 + SOAR demo on CSV / synthetic flows | Frozen (`ML_Package_v2.md`) |
 | **T1 — Next** | Lab PCAP/live flows → feature bridge → real XGBoost predict + log | Immediate priority |
 | **T2** | SOAR on live NIDS hits (dry-run firewall → approved block) | After T1 stable |
 | **T3** | Minimal HIDS (process + sensitive file/cookie path access) + second model | Parallel after T1 starts |
 | **T4** | Correlation (host + network same incident) + React dashboard | After T2/T3 evidence exists |
-| **T5** | Extra NIDS classes (Port Scan, DDoS) via more CIC days / retrain | Only after T1 works |
+| **T5** | Extra NIDS classes (e.g. Port Scan) via more CIC days / retrain | Only after T1 works; DDoS/DoS/Botnet already in v2 |
 
 Supervisor CVE note: if required, **anchor HIDS** to one Windows CVE as a **case study** (mitigation + behavioural simulation). Platform stays the same; case study changes. Prefer network-visible or behaviour-demo CVEs — not “we wrote an RCE exploit.”
 
@@ -90,7 +92,7 @@ Capstone/
 ├── docs/                          # Plans, Phase 1 report, this blueprint
 ├── data/                          # Local only (gitignored)
 ├── ml/                            # Offline train / EDA / experiments
-├── models/                        # sentinel_xgb.pkl + encoder + feature_columns
+├── models/                        # sentinel_xgb_v2.pkl + encoder_v2 + feature_columns_v2
 │
 ├── nids/                          # NEW — live path (Member 2)
 │   ├── capture.py                 # scapy / exporter wrapper
@@ -119,19 +121,22 @@ Capstone/
 ## 6. Development roadmap (revised from the pasted plan)
 
 ### Phase 1 — Offline NIDS baseline — **DONE**
-- EDA, clean CSV, DT / RF / XGBoost, robustness A–C, saved artefacts  
-- Docs: `Phase1_Progress_Report.md`, `features_list.md`
+- EDA, clean CSV, DT / RF / XGBoost, robustness A–C (3-class archive)  
+- Docs: `Phase1_Progress_Report.md`
 
-### Phase 2 — Wire real ML into agents — **NEXT (short)**
-The pasted “Phase 2 = train models” is largely **already done** for NIDS. Remaining:
+### Phase 1b / Package v2 — Multiclass + hybrid — **DONE / FROZEN**
+- 6-class dataset + `train_xgb_v2.py` → `*_v2.pkl`  
+- Hybrid port override in adapter + Detection Agent  
+- Docs: `ML_Package_v2.md`, `features_list.md`, contracts  
 
-1. Adapter: Detection Agent loads `../models/sentinel_xgb.pkl` + `feature_columns.pkl` + `label_encoder.pkl`  
-2. Align flow schema (CIC names vs snake_case contract) in one mapper  
-3. Golden demo using **real** model on rows from `cic_clean.csv` and on synthetic lab flows  
+### Phase 2 — Wire real ML into agents — **DONE**
+1. Adapter: Detection Agent loads `sentinel_xgb_v2.pkl` + `feature_columns_v2.pkl` + `label_encoder_v2.pkl`  
+2. Flow schema mapper: `nids/feature_extractor.py` + PacketAgent  
+3. Golden demo: `soar/demo_real_model.py` on multiclass CSV rows  
 
-**Exit criteria:** `demo_runner` / orchestrator prints Benign vs FTP vs SSH with confidence from the real XGBoost file.
+**Exit criteria met:** real XGBoost labels + confidence through SOAR on CSV paths.
 
-### Phase 3 — Live NIDS lab + feature bridge — **CRITICAL PATH**
+### Phase 3 — Live NIDS lab + feature bridge — **CRITICAL PATH (NEXT)**
 1. VirtualBox + Kali host-only network  
 2. Capture (Scapy and/or CICFlowMeter) on Windows  
 3. Feature extractor → **77 columns, training order**  
@@ -178,7 +183,7 @@ You **never** judge the model on random public Wi‑Fi first. You generate label
 | 1 | Host-only lab: Windows + Kali | Ping visible in sniffer |
 | 2 | Benign: browse / download on Windows | Mostly Benign |
 | 3 | Attack **own** VM/service: Hydra SSH/FTP, Nmap | Expected class (or known gap if class not in model yet) |
-| 4 | Packets → flows → **77 features** | Row shape `(1, 77)` matches `feature_columns.pkl` |
+| 4 | Packets → flows → **77 features** | Row shape `(1, 77)` matches `feature_columns_v2.pkl` |
 | 5 | `predict` + `predict_proba` | Label + confidence |
 | 6 | Scorecard | Confusion table: Actual (what you ran) vs Predicted |
 
@@ -187,9 +192,11 @@ You **never** judge the model on random public Wi‑Fi first. You generate label
 | You generate | Model can output today |
 |--------------|-------------------------|
 | Web / ping / most benign | Benign |
-| SSH Hydra | SSH-Bruteforce |
-| FTP Hydra | FTP-BruteForce |
-| Nmap / DDoS | **Not trained** — expect Benign or wrong; do not claim until retrain |
+| SSH Hydra | SSH-Bruteforce (hybrid helps if DoS/SSH ambiguous on port 22) |
+| FTP Hydra | FTP-BruteForce (hybrid helps if DoS/FTP ambiguous on port 21) |
+| DoS / DDoS lab floods | DoS / DDoS (trained in v2; live feature quality may still drift) |
+| Botnet-like C2 (if lab matches training) | Botnet |
+| Nmap / Port Scan | **Not a dedicated class** — expect Benign or wrong; do not claim until retrain |
 
 Keep a simple CSV: `timestamp, scenario, expected, predicted, confidence, notes`.
 
@@ -199,21 +206,21 @@ Keep a simple CSV: `timestamp, scenario, expected, predicted, confidence, notes`
 
 Ordered; do not skip ahead to React.
 
-### Week A — Integration + honesty in demos
-1. Document feature/name mismatch (77 CIC vs agent sample features).  
-2. Implement **one** mapper + point Detection Agent at real `models/`.  
-3. Run offline CSV row through full agent pipeline (SOAR demo with real ML).  
-4. Fix supervisor wording: **CSE-CIC-IDS2018** brute-force subset; 77 features without `Dst Port`.
+### Week A — Integration + honesty in demos — **DONE**
+1. Feature contract + v2 artefacts documented (`ML_Package_v2.md`).  
+2. Mapper + Detection Agent → real `models/*_v2.pkl`.  
+3. Offline CSV through SOAR (`demo_real_model.py`).  
+4. Supervisor wording: **CSE-CIC-IDS2018** multiclass; 77 features without `Dst Port`; hybrid deploy policy.
 
-### Week B — Lab plumbing
+### Week B — Lab plumbing — **NEXT**
 1. VirtualBox + Kali OVA; host-only adapter; note IPs.  
 2. OpenSSH (and/or FTP) **on a disposable lab VM**, not production.  
 3. Scapy sniff proof: Kali `ping` → Windows prints packets.  
-4. Choose exporter path: CICFlowMeter **or** reduced feature set + retrain (decide explicitly).
+4. Choose exporter path: CICFlowMeter **or** reduced feature set + retrain (decide explicitly). Do **not** break the v2 freeze unless you choose retrain.
 
 ### Week C — First live scorecard
 1. Feature extractor MVP (even partial columns: document gaps).  
-2. 20+ labelled trials (benign + SSH; FTP if ready).  
+2. 20+ labelled trials (benign + SSH; FTP / DoS if ready).  
 3. One page results for supervisor: live accuracy ≠ CIC offline accuracy.  
 4. Only then: dry-run firewall on high-confidence SSH hits.
 
@@ -227,9 +234,9 @@ Ordered; do not skip ahead to React.
 
 | Member | Owns | Near-term deliverable |
 |--------|------|------------------------|
-| **1 — AIML** | `ml/`, `models/`, HIDS model later, live eval scorecard | Adapter + feature contract; later HIDS features |
-| **2 — Capture / security** | `nids/` capture + extractor, lab attacks | PCAP/live → flow dict |
-| **3 — SOAR** | `Multi-Model Architecture/` | Real-model load, policies, dry-run response |
+| **1 — AIML** | `ml/`, `models/`, HIDS model later, live eval scorecard | Package **frozen** at v2; support live scorecard only |
+| **2 — Capture / security** | `nids/` capture + extractor, lab attacks | PCAP/live → flow dict (**next bottleneck**) |
+| **3 — SOAR** | `soar/` | Policies + dry-run response on live hits |
 | **4 — Dashboard** | `dashboard/` + API consumer | Wait for stable incident JSON; then React + WS |
 
 ---
@@ -246,7 +253,7 @@ Skip buying commercial IDS. Stay in isolated VMs for attacks.
 
 ## 11. 45-second pitch (corrected)
 
-> SentinelAI is a hybrid AI Windows defence platform. Our NIDS uses XGBoost on CSE-CIC-IDS2018-style flow features to detect SSH and FTP brute force, and we are bridging live lab traffic into that model. A multi-agent SOAR layer already maps MITRE techniques, scores risk, can drive firewall actions, logs to SQLite, and builds PDF reports. Next we add a Windows HIDS for behavioural threats such as session-cookie theft, then a user-friendly dashboard so alerts read like plain language, not packet flags. Goal: detect on both network and host, explain, and respond.
+> SentinelAI is a hybrid AI Windows defence platform. Our NIDS uses a frozen 6-class XGBoost model on CSE-CIC-IDS2018-style flow features (Benign, Botnet, DDoS, DoS, FTP and SSH brute force), with a hybrid port policy for DoS/FTP/SSH ambiguity, and we are bridging live lab traffic into that model. A multi-agent SOAR layer already maps MITRE techniques, scores risk, can drive firewall actions, logs to SQLite, and builds PDF reports. Next we prove live detection in the lab, then add a Windows HIDS for behavioural threats such as session-cookie theft, then a user-friendly dashboard. Goal: detect on both network and host, explain, and respond.
 
 ---
 
@@ -262,13 +269,12 @@ Minimum shippable Capstone story:
 
 ---
 
-## 13. What to do tomorrow morning
+## 13. What to do next (after ML freeze)
 
-1. Open `Multi-Model Architecture/demo_runner.py` and confirm it runs.  
-2. List exact files Detection Agent loads vs files in `Capstone/models/`.  
-3. Write a half-page “adapter design” (names + shapes).  
-4. Install/verify VirtualBox; download Kali OVA if not present.  
-5. Do **not** start the React app yet.
+1. Confirm `python soar\demo_real_model.py` still runs on this machine.  
+2. Install/verify VirtualBox; download Kali OVA if not present.  
+3. Start Week B lab plumbing — do **not** retrain v2.  
+4. Do **not** start the React app yet.
 
 ---
 

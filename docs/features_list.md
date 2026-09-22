@@ -1,10 +1,11 @@
 # SentinelAI — Model Feature Contract (77 columns)
 
-**Source:** `models/feature_columns_v2.pkl`
-**Model:** XGBoost (`models/sentinel_xgb_v2.pkl`), trained **without** `Dst Port`
+**Source:** `models/feature_columns_v2.pkl`  
+**Model:** XGBoost (`models/sentinel_xgb_v2.pkl`), trained **without** `Dst Port`  
+**Package status:** **FROZEN** — see `docs/ML_Package_v2.md`  
 **Order matters:** inference must supply values in this exact index order.
 
-This list is the Phase 1 → live pipeline contract. Any flow exporter output must be mapped into these names (or documented as missing).
+This list is the NIDS v2 → live pipeline contract. Any flow exporter output must be mapped into these names (or documented as missing).
 
 ---
 
@@ -14,7 +15,8 @@ This list is the Phase 1 → live pipeline contract. Any flow exporter output mu
 |------|------:|
 | Feature count | 77 |
 | Excluded from model | `Dst Port`, `Label`, `Timestamp` |
-| Classes | Benign, FTP-BruteForce, SSH-Bruteforce |
+| Classes (6) | Benign, Botnet, DDoS, DoS, FTP-BruteForce, SSH-Bruteforce |
+| Hybrid (post-hoc) | `dst_port` may remap DoS↔FTP/SSH only; never fed into the 77-vector |
 
 ---
 
@@ -157,4 +159,4 @@ If this markdown and the pickle ever disagree, **trust the pickle** and update t
 
 ---
 
-*Reference for Phase 2 feature bridge / live inference.*
+*Reference for live feature bridge / inference. Package freeze: `docs/ML_Package_v2.md`.*
