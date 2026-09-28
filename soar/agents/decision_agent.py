@@ -9,7 +9,7 @@ import time
 from typing import Dict, Any, Optional
 
 from agents.base_agent import BaseAgent
-from core.schemas import FlowEvent, DetectionResult, ThreatEvidence, RiskScoreResult, ActionPlan, Incident, ActionType
+from core.schemas import FlowEvent, DetectionResult, ThreatEvidence, RiskScoreResult, ActionPlan, Incident
 from core.event_bus import EventBus, Event
 from rules.policy_engine import PolicyEngine
 

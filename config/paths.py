@@ -27,7 +27,6 @@ MODEL_XGB_V2 = MODELS_DIR / "sentinel_xgb_v2.pkl"
 MODEL_ENCODER_V2 = MODELS_DIR / "label_encoder_v2.pkl"
 MODEL_FEATURES_V2 = MODELS_DIR / "feature_columns_v2.pkl"
 
-LAB_CLEAN_CSV = DATA_PROCESSED / "lab_multiclass_clean.csv"
 MERGED_CLEAN_CSV = DATA_PROCESSED / "cic_lab_merged_clean.csv"
 
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
