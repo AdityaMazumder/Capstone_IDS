@@ -20,7 +20,7 @@ whitelists:
     - "10.10.0.0/16"
 
 # Base Attack Weights for Risk Calculation (Scale 0.0 to 10.0)
-# Include v2 CIC label spellings (Benign / Botnet / DDoS / DoS / FTP-BruteForce / SSH-Bruteforce)
+# v3 lab labels include PortScan; Botnet kept for v2 compatibility
 base_attack_weights:
   DDoS: 9.0
   Botnet: 9.0
@@ -90,11 +90,13 @@ velocity_settings:
 target_sensitivity:
   critical_subnets:
     - "192.168.1.0/24"
+    - "192.168.56.0/24"   # VirtualBox host-only lab (Kali/Ubuntu)
   sensitive_ports:
     3306: 1.5   # MySQL Database
     5432: 1.5   # PostgreSQL Database
     1433: 1.5   # MSSQL Database
     22: 1.2     # SSH Remote Access
+    21: 1.0     # FTP
     3389: 1.5   # Windows Remote Desktop (RDP)
     445: 1.8    # SMB / Active Directory
     80: 0.5     # HTTP Web Server

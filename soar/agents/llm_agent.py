@@ -38,9 +38,10 @@ class LLMExplanationAgent(BaseAgent):
         self.ollama_model = ollama_model
 
     def _on_initialize(self) -> None:
-        if self.event_bus:
-            # Subscribe to incidents that require plain-English briefings
-            self.event_bus.subscribe("incident.created", self.process, priority=8, agent_name=self.name)
+        # Briefings are invoked synchronously by SentinelOrchestrator.process_flow
+        # (so explanation is attached before DB persist). Do not also subscribe to
+        # incident.created — that duplicated Gemini/Ollama calls and slowed demos.
+        return
 
     def _handle_event(self, event: Event) -> Optional[LLMExplanation]:
         data = event.data

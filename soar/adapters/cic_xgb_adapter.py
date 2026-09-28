@@ -1,10 +1,11 @@
 """
 CIC XGBoost adapter — Phase-1 NIDS artefacts → Detection Agent.
 
-Loads Capstone/models/:
-  - sentinel_xgb_v2.pkl
-  - label_encoder_v2.pkl
-  - feature_columns_v2.pkl  (77 CIC names, no Dst Port)
+Loads Capstone/models/ via config.paths (active = v3 lab package):
+  - sentinel_xgb_v3.pkl
+  - label_encoder_v3.pkl
+  - feature_columns_v3.pkl  (77 CIC names, no Dst Port)
+  v2 CIC baseline files remain available as *_v2.pkl.
 
 Does NOT require scaler.pkl (tree models).
 Does NOT feed Dst Port into the model; optional dst_port only applies a post-hoc override
@@ -23,10 +24,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from config.paths import MODELS_DIR
-MODEL_XGB = MODELS_DIR / "sentinel_xgb_v2.pkl"
-MODEL_ENCODER = MODELS_DIR / "label_encoder_v2.pkl"
-MODEL_FEATURES = MODELS_DIR / "feature_columns_v2.pkl"
+from config.paths import MODEL_ENCODER, MODEL_FEATURES, MODEL_XGB
 
 _AMBIGUOUS_PORT_LABELS = frozenset({"DoS", "FTP-BruteForce", "SSH-Bruteforce"})
 
@@ -117,7 +115,7 @@ class CicXgbAdapter:
     ) -> Tuple[str, float, Dict[str, float]]:
         """
         Returns (label_name, confidence, probability_dict).
-        Labels: Benign | FTP-BruteForce | SSH-Bruteforce | Botnet | DoS | DDoS
+        Labels: Benign | Botnet | DDoS | DoS | FTP-BruteForce | PortScan | SSH-Bruteforce (v3 CIC+lab)
 
         If dst_port is omitted, tries raw_features["Dst Port"] / ["dst_port"] for the
         hybrid override only (still excluded from the 77-dim vector).

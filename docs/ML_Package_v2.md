@@ -1,7 +1,8 @@
 # SentinelAI — NIDS ML Package v2 (Frozen)
 
 **Status date:** September 2026  
-**Status:** **CLOSED / FROZEN** for offline training. Do not retrain or rename artefacts unless a live-lab demo fails.
+**Status:** **CLOSED / FROZEN** CIC offline baseline.  
+**Active live package:** **v3** — see `docs/ML_Package_v3.md` (lab-adapted; `config/paths.py` points at `*_v3.pkl`).
 
 This note closes the offline NIDS package after the multiclass upgrade. Historical 3-class work remains in `docs/Phase1_Progress_Report.md` (archived baseline story only).
 

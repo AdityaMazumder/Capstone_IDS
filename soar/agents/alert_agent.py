@@ -29,6 +29,7 @@ class AlertAgent(BaseAgent):
         self,
         enable_desktop: bool = True,
         enable_telegram: bool = False,
+        enable_console: bool = True,
         telegram_token: Optional[str] = None,
         telegram_chat_id: Optional[str] = None,
         event_bus: Optional[EventBus] = None
@@ -36,6 +37,7 @@ class AlertAgent(BaseAgent):
         super().__init__(name="AlertAgent", event_bus=event_bus)
         self.enable_desktop = enable_desktop
         self.enable_telegram = enable_telegram
+        self.enable_console = enable_console
         self.telegram_token = telegram_token
         self.telegram_chat_id = telegram_chat_id
         
@@ -124,8 +126,9 @@ class AlertAgent(BaseAgent):
             self._send_telegram_notification(f"{title}\n\n{msg}")
             channels_used.append("TELEGRAM")
 
-        # 4. Rich Console Log
-        self._print_console_alert(alert)
+        # 4. Rich Console Log (disable for batch scorecards)
+        if self.enable_console:
+            self._print_console_alert(alert)
 
         return alert
 

@@ -6,7 +6,7 @@
 
 This document is the working blueprint from **today’s codebase** to the full platform in the new problem statement. It replaces the old “NIDS-only offline CSV” end goal without throwing away Phase 1 or the multi-agent work already on GitHub.
 
-**ML freeze:** Offline NIDS is closed at **v2 (6-class)** — see `docs/ML_Package_v2.md`. Next critical path is live capture / feature bridge, not more training.
+**ML packages:** CIC offline baseline frozen at **v2** (`docs/ML_Package_v2.md`). **Active package is v3** — CIC + lab merge (`docs/ML_Package_v3.md`).
 
 ---
 
