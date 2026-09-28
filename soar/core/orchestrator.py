@@ -46,6 +46,7 @@ class SentinelOrchestrator:
         model_path: Optional[str] = None,
         dry_run_firewall: bool = True,
         enable_desktop_alerts: bool = True,
+        enable_console_alerts: bool = True,
         gemini_api_key: Optional[str] = None
     ):
         self.start_time = time.time()
@@ -73,7 +74,11 @@ class SentinelOrchestrator:
         self.risk_agent = RiskAssessmentAgent(policy_engine=self.policy_engine, event_bus=self.event_bus)
         self.decision_agent = DecisionAgent(policy_engine=self.policy_engine, event_bus=self.event_bus)
         self.firewall_agent = FirewallAgent(db_manager=self.db_manager, dry_run=dry_run_firewall, event_bus=self.event_bus)
-        self.alert_agent = AlertAgent(enable_desktop=enable_desktop_alerts, event_bus=self.event_bus)
+        self.alert_agent = AlertAgent(
+            enable_desktop=enable_desktop_alerts,
+            enable_console=enable_console_alerts,
+            event_bus=self.event_bus,
+        )
         self.logging_agent = LoggingAgent(db_manager=self.db_manager, event_bus=self.event_bus)
         self.report_agent = ReportAgent(db_manager=self.db_manager, event_bus=self.event_bus)
         self.llm_agent = LLMExplanationAgent(gemini_api_key=gemini_api_key, event_bus=self.event_bus)

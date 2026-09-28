@@ -76,19 +76,10 @@ class DecisionAgent(BaseAgent):
             flow.src_ip, detection.attack_type, risk.score, action_plan.action_type.value, action_plan.rule_matched
         )
 
+        # Notify observers only. Firewall / alert / log / LLM are executed once by
+        # SentinelOrchestrator.process_flow to avoid duplicate dry-run blocks,
+        # double console alerts, double DB writes, and double LLM timeouts.
         if self.event_bus:
-            # 1. Publish full incident created
             self.event_bus.publish("incident.created", incident, sender=self.name)
-
-            # 2. Trigger Firewall Enforcement if action requires blocking
-            if action_plan.action_type in (ActionType.BLOCK_IP, ActionType.TEMP_BAN_IP):
-                self.event_bus.publish("action.firewall", incident, sender=self.name)
-
-            # 3. Trigger Alert Dispatch
-            if action_plan.action_type != ActionType.IGNORE and detection.attack_type.upper() != "BENIGN":
-                self.event_bus.publish("action.alert", incident, sender=self.name)
-
-            # 4. Trigger Persistence Log
-            self.event_bus.publish("action.log", incident, sender=self.name)
 
         return incident

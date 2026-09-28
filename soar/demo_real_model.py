@@ -1,5 +1,5 @@
 """
-SOAR smoke demo with real multiclass XGBoost v2 on cic_multiclass_clean.csv rows.
+SOAR smoke demo with real XGBoost v3 on CIC+lab merged (or CIC) CSV rows.
 
 From Capstone root:
   python soar/demo_real_model.py
@@ -27,17 +27,21 @@ except ImportError:
     def init(*_a, **_k):
         pass
 
-from config.paths import CLEAN_CSV
+from config.paths import CLEAN_CSV, MERGED_CLEAN_CSV
 from core.orchestrator import SentinelOrchestrator
 from nids.feature_extractor import csv_row_to_raw_features
 
 # colorama optional
 
-# One row per class if available
+# One row per class if available (merged / CIC labels)
 PREFERRED = {
     "Benign": None,
+    "Botnet": None,
     "FTP-BruteForce": None,
     "SSH-Bruteforce": None,
+    "DoS": None,
+    "DDoS": None,
+    "PortScan": None,
 }
 
 
@@ -53,8 +57,8 @@ def pick_rows(df: pd.DataFrame) -> list[int]:
 
 
 def main() -> None:
-    print(f"{Fore.CYAN}SentinelAI — real CIC XGBoost through SOAR orchestrator{Style.RESET_ALL}")
-    print("Dataset: CSE-CIC-IDS2018-style multiclass (77 features, no Dst Port + hybrid port override)\n")
+    print(f"{Fore.CYAN}SentinelAI — real XGBoost through SOAR orchestrator{Style.RESET_ALL}")
+    print("Dataset: CIC + lab merged multiclass (77 features, no Dst Port + hybrid port override)\n")
 
     orch = SentinelOrchestrator(dry_run_firewall=True, enable_desktop_alerts=False)
     orch.initialize()
@@ -67,15 +71,29 @@ def main() -> None:
     print(f"{Fore.GREEN}[+] ML loaded: {orch.detection_agent.adapter.model_path}{Style.RESET_ALL}")
     print(f"    Features: {len(orch.detection_agent.adapter.feature_names)}\n")
 
-    df = pd.read_csv(CLEAN_CSV)
+    # Prefer merged v3 dataset; fall back to CIC clean
+    data_path = MERGED_CLEAN_CSV if MERGED_CLEAN_CSV.exists() else CLEAN_CSV
+    print(f"Rows from: {data_path}\n")
+    df = pd.read_csv(data_path)
     for idx in pick_rows(df):
         row = df.iloc[idx]
         raw = csv_row_to_raw_features(row)
+        label = str(row["Label"])
+        if label == "SSH-Bruteforce":
+            dst_port = 22
+        elif "FTP" in label:
+            dst_port = 21
+        elif label in ("DoS", "DDoS"):
+            dst_port = 80
+        elif label == "PortScan":
+            dst_port = 443
+        else:
+            dst_port = 443
         flow = {
             "src_ip": "192.168.56.101",
-            "dst_ip": "192.168.56.1",
+            "dst_ip": "192.168.56.102",
             "src_port": 50000,
-            "dst_port": 22 if row["Label"] == "SSH-Bruteforce" else (21 if "FTP" in str(row["Label"]) else 443),
+            "dst_port": dst_port,
             "protocol": int(row.get("Protocol", 6) or 6),
             "raw_features": raw,
         }
