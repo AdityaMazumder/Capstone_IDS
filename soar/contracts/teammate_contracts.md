@@ -182,3 +182,53 @@ async function handleUnblock(ruleId) {
 }
 ```
 
+---
+
+## 4. Phase 5: HIDS Teammate Contracts (Host Intrusion Detection)
+
+### Member 1: Process Sensor (`hids/process_monitor.py`)
+Outputs running process metadata every 2 seconds:
+```python
+{
+    "pid": 5892,
+    "process_name": "python.exe",
+    "parent_name": "cmd.exe",
+    "cpu_percent": 8.1,
+    "memory_mb": 72.0,
+    "exe_path": "C:\\Python311\\python.exe"
+}
+```
+
+### Member 2: File Sensor (`hids/file_monitor.py`)
+Monitors sensitive browser credentials (Chrome `Cookies`, `Local State`, Edge `Cookies`, Firefox `cookies.sqlite`):
+```python
+{
+    "file_path": "C:\\Users\\User\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies",
+    "file_type": "CookieDB",
+    "event_type": "READ"
+}
+```
+
+### Member 4: Dataset & ML Integration (Week 3 Isolation Forest)
+Send combined process + file event + ML prediction to SOAR:
+```python
+from soar.core.orchestrator import SentinelOrchestrator
+
+orchestrator = SentinelOrchestrator(dry_run_firewall=True)
+orchestrator.initialize()
+
+# Ingest and execute automated SOAR response (PID termination & alert)
+host_incident = orchestrator.process_host_event({
+    "pid": 5892,
+    "process_name": "python.exe",
+    "parent_name": "cmd.exe",
+    "cpu_percent": 8.1,
+    "memory_mb": 72.0,
+    "file_path": "C:\\Users\\User\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies",
+    "label": "Stealer",
+    "anomaly_score": 0.92
+})
+print(f"SOAR Action: {host_incident.soar_action} - Status: {host_incident.action_status}")
+```
+
+

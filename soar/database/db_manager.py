@@ -14,7 +14,7 @@ import time
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 
-from core.schemas import Incident, FirewallRule, SystemMetrics, SeverityLevel
+from core.schemas import Incident, FirewallRule, SystemMetrics, SeverityLevel, HostIncident
 
 logger = logging.getLogger("SentinelAI.DatabaseManager")
 
@@ -139,6 +139,70 @@ class DatabaseManager:
                 cursor.execute(query, (incident_id,))
                 row = cursor.fetchone()
                 return dict(row) if row else None
+
+    # -------------------------------------------------------------
+    # Phase 5: Host Incident CRUD Operations (HIDS)
+    # -------------------------------------------------------------
+
+    def save_host_incident(self, host_inc: HostIncident) -> bool:
+        """Persist a Phase 5 HIDS host incident into SQLite."""
+        with self._lock:
+            query = """
+            INSERT OR REPLACE INTO host_incidents (
+                incident_id, timestamp, hostname, pid, process_name, parent_name,
+                cpu_percent, memory_mb, file_path, file_type, event_type,
+                classification, confidence, risk_score, severity,
+                mitre_technique_id, mitre_technique_name, soar_action,
+                action_status, remediation_notes, raw_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            raw_json_str = json.dumps(host_inc.to_dict())
+            try:
+                with self._get_connection() as conn:
+                    conn.execute(query, (
+                        host_inc.incident_id,
+                        host_inc.timestamp,
+                        host_inc.hostname,
+                        host_inc.process.pid,
+                        host_inc.process.process_name,
+                        host_inc.process.parent_name,
+                        host_inc.process.cpu_percent,
+                        host_inc.process.memory_mb,
+                        host_inc.file_event.file_path,
+                        host_inc.file_event.file_type,
+                        host_inc.file_event.event_type,
+                        host_inc.classification,
+                        host_inc.confidence,
+                        host_inc.risk_score,
+                        host_inc.severity.value,
+                        host_inc.mitre_technique_id,
+                        host_inc.mitre_technique_name,
+                        host_inc.soar_action.value,
+                        host_inc.action_status,
+                        host_inc.remediation_notes,
+                        raw_json_str
+                    ))
+                    conn.commit()
+                return True
+            except Exception as exc:
+                logger.error("Failed to save host incident %s: %s", host_inc.incident_id, exc)
+                return False
+
+    def get_recent_host_incidents(self, limit: int = 50, classification: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Retrieve recent host incidents from database."""
+        with self._lock:
+            if classification:
+                query = "SELECT * FROM host_incidents WHERE classification = ? ORDER BY timestamp DESC LIMIT ?"
+                params = (classification, limit)
+            else:
+                query = "SELECT * FROM host_incidents ORDER BY timestamp DESC LIMIT ?"
+                params = (limit,)
+
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                return [dict(row) for row in cursor.fetchall()]
+
 
     # -------------------------------------------------------------
     # Blocked IPs Operations
