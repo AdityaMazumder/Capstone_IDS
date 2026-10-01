@@ -227,11 +227,28 @@ CPU is a share of total machine CPU (0–100). `EXIT` + `END` rows are one row p
 The monitor excludes itself. Run as Administrator to get `cmdline` / `exe_path` for system and other-user processes.
 
 ### Member 1: File Sensor (`hids/file_monitor.py`)
-Monitors sensitive browser credentials (Chrome `Cookies`, `Local State`, Edge `Cookies`, Firefox `cookies.sqlite`):
+Logs who opened the files infostealers target (Chromium-browser `Login Data`, `Cookies`, `Web Data`, `Local State`
+in every profile; Firefox `logins.json`, `key4.db`, `cookies.sqlite`; Bitcoin `wallet.dat`) to
+`hids/logs/file_events_YYYY-MM-DD.csv` (`python -m hids.file_monitor`, Administrator for audit mode).
+
+Columns: `timestamp` (epoch, ms), `time_iso`, `event_type` (`READ`, `MODIFY`, `DELETE`, `CREATE`), `pid`, `create_time`,
+`process_name`, `exe_path`, `parent_name`, `file_path`, `file_type`, `browser`, `accessor_is_owner`, `access_mask`, `source`.
+
+- `source = audit`: Windows event 4663, real `pid` and `exe_path`. `(pid, create_time)` joins with the process sensor's runs;
+  `create_time` / `parent_name` are empty when the process exited before the sensor looked it up.
+- `source = poll` (no Admin): changes only, `process_name = unknown`, no `pid`. Not sendable to SOAR.
+- `accessor_is_owner`: `1` = the browser's own executable from its install folder, `0` = anything else, empty = unknown.
+- `file_type` uses the same names as `SENSITIVE_TARGETS` in `host_agent.py`.
+
+`hids.file_monitor.to_host_event(row)` turns an audit row into the SOAR host event above:
 ```python
 {
-    "file_path": "C:\\Users\\User\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies",
-    "file_type": "CookieDB",
+    "pid": 6700,
+    "process_name": "svc_update.exe",
+    "exe_path": "C:\\Users\\User\\AppData\\Local\\Temp\\svc_update.exe",
+    "parent_name": "powershell.exe",
+    "file_path": "C:\\Users\\User\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Login Data",
+    "file_type": "Saved Passwords DB",
     "event_type": "READ"
 }
 ```

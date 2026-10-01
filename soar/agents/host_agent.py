@@ -56,6 +56,7 @@ SENSITIVE_TARGETS = {
     "Login Data": {"type": "Saved Passwords DB", "weight": 3.5, "mitre_id": "T1555.003", "mitre_name": "Credentials from Web Browsers"},
     "cookies.sqlite": {"type": "Firefox CookieDB", "weight": 2.5, "mitre_id": "T1539", "mitre_name": "Steal Web Session Cookie"},
     "key4.db": {"type": "Firefox Key Database", "weight": 3.5, "mitre_id": "T1555.003", "mitre_name": "Credentials from Web Browsers"},
+    "logins.json": {"type": "Firefox Saved Passwords", "weight": 3.5, "mitre_id": "T1555.003", "mitre_name": "Credentials from Web Browsers"},
     "wallet.dat": {"type": "Crypto Wallet", "weight": 3.5, "mitre_id": "T1005", "mitre_name": "Data from Local System"},
 }
 

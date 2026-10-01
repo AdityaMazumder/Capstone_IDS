@@ -1,312 +1,186 @@
 """
-File sensor (watchdog) — Phase 5 HIDS browser-file monitor.
+File sensor - Phase 5 HIDS browser credential monitor.
 
-Watches browser files that infostealers commonly target and logs an event
-whenever one is touched:
+Watches the files infostealers (RedLine, Vidar, Lumma, Raccoon) go after and logs
+who touched them to hids/logs/file_events_YYYY-MM-DD.csv.
 
-  Browser   | File(s)
-  ----------|---------------------------
-  Chrome    | Cookies  and  Local State
-  Edge      | Cookies
-  Firefox   | cookies.sqlite
+Targets (every profile, auto-resolved for the current user):
+  Chrome, Edge, Brave, Vivaldi, Opera, Opera GX
+      Login Data, Login Data For Account, Cookies, Network/Cookies, Web Data, Local State
+  Firefox   logins.json, key4.db, cookies.sqlite
+  Bitcoin   wallet.dat
 
-Each CSV row has four columns:
-  timestamp, process, file_path, event_type (READ / MODIFY / CREATE)
+Modes:
+  audit  (Administrator)  Windows object-access auditing. The sensor enables the
+         "File System" audit subcategory, puts an audit rule (SACL) on each target
+         and reads event 4663 from the Security log. Every open of a target for
+         reading, writing or deleting is logged with the real PID and executable
+         path of the process that did it. This is the only mode that sees reads,
+         i.e. a stealer copying a cookie or password database.
+  poll   (no Admin)  Detects CREATE / MODIFY / DELETE by watching file identity,
+         size and mtime. Reads are invisible and the process is unknown, so these
+         rows have no pid and cannot be sent to SOAR.
 
-Output:  hids/logs/file_events.csv
+Audit rules stay on the files after the sensor stops (they only produce log entries).
+Remove them with --remove-audit.
 
-Run from repo root:
-  python -m hids.file_monitor [--duration 0] [--poll-interval 1.0]
+Run from repo root (Administrator PowerShell for audit mode):
+  python -m hids.file_monitor [--mode auto|audit|poll] [--duration 0]
+  python -m hids.file_monitor --list-targets
+  python -m hids.file_monitor --remove-audit
 """
 from __future__ import annotations
 
 import argparse
-import csv
+import ctypes
+import glob
 import os
-import platform
+import subprocess
 import time
-from datetime import datetime
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
+from hids.process_monitor import DailyCsvWriter
 
+POLL_INTERVAL = 1.0
+RESCAN_EVERY = 60.0
+DEDUP_WINDOW = 2.0
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_DIR = os.path.join(BASE_DIR, "logs")
-LOG_FILE = "file_events.csv"
-POLL_INTERVAL = 1.0  # seconds between watchdog poll ticks
+LOG_PREFIX = "file_events"
 
-FIELDS = ["timestamp", "process", "file_path", "event_type"]
+FIELDS = [
+    "timestamp", "time_iso", "event_type",
+    "pid", "create_time", "process_name", "exe_path", "parent_name",
+    "file_path", "file_type", "browser", "accessor_is_owner",
+    "access_mask", "source",
+]
+
+# GUID instead of the name so auditpol works on non-English Windows
+FILE_SYSTEM_SUBCATEGORY = "{0CCE921D-69AE-11D9-BED3-505054503030}"
+EVERYONE_SID = "S-1-1-0"
+AUDIT_RIGHTS = "ReadData, WriteData, AppendData, Delete"
+EVENT_NS = "{http://schemas.microsoft.com/win/2004/08/events/event}"
+
+READ_DATA = 0x1
+WRITE_DATA = 0x2
+APPEND_DATA = 0x4
+DELETE = 0x10000
+
 
 # ---------------------------------------------------------------------------
-# Browser-path resolution (Windows)
+# Targets
 # ---------------------------------------------------------------------------
 
-def _resolve_browser_paths() -> Dict[str, List[Path]]:
-    """
-    Return a mapping  { browser_name: [Path, ...] }  for the current user.
-    Only includes paths that actually exist on disk so we don't watch ghosts.
-    """
-    targets: Dict[str, List[str]] = {}
+@dataclass(frozen=True)
+class Browser:
+    exe: str
+    install_marker: str  # lower-case path fragment of a genuine install
 
-    if platform.system() != "Windows":
-        # Graceful no-op on Linux/macOS lab boxes
-        return {}
 
-    local_app = os.environ.get("LOCALAPPDATA", "")
-    appdata = os.environ.get("APPDATA", "")
+BROWSERS: Dict[str, Browser] = {
+    "Chrome": Browser("chrome.exe", "\\google\\chrome\\application\\"),
+    "Edge": Browser("msedge.exe", "\\microsoft\\edge\\application\\"),
+    "Brave": Browser("brave.exe", "\\bravesoftware\\brave-browser\\application\\"),
+    "Vivaldi": Browser("vivaldi.exe", "\\vivaldi\\application\\"),
+    "Opera": Browser("opera.exe", "\\programs\\opera\\"),
+    "Opera GX": Browser("opera.exe", "\\programs\\opera gx\\"),
+    "Firefox": Browser("firefox.exe", "\\mozilla firefox\\"),
+    "Bitcoin Core": Browser("bitcoin-qt.exe", "\\bitcoin\\"),
+}
 
-    if local_app:
-        chrome_dir = os.path.join(local_app, "Google", "Chrome", "User Data")
-        targets["Chrome"] = [
-            os.path.join(chrome_dir, "Default", "Cookies"),
-            os.path.join(chrome_dir, "Default", "Network", "Cookies"),
-            os.path.join(chrome_dir, "Local State"),
-        ]
+# (env var, user data folder, browser, profile folder globs relative to it)
+CHROMIUM_ROOTS: List[Tuple[str, str, str, Tuple[str, ...]]] = [
+    ("LOCALAPPDATA", "Google\\Chrome\\User Data", "Chrome", ("Default", "Profile *")),
+    ("LOCALAPPDATA", "Microsoft\\Edge\\User Data", "Edge", ("Default", "Profile *")),
+    ("LOCALAPPDATA", "BraveSoftware\\Brave-Browser\\User Data", "Brave", ("Default", "Profile *")),
+    ("LOCALAPPDATA", "Vivaldi\\User Data", "Vivaldi", ("Default", "Profile *")),
+    ("APPDATA", "Opera Software\\Opera Stable", "Opera", (".", "Default")),
+    ("APPDATA", "Opera Software\\Opera GX Stable", "Opera GX", (".", "Default")),
+]
+CHROMIUM_PROFILE_FILES = ("Login Data", "Login Data For Account", "Cookies", "Network\\Cookies", "Web Data")
+FIREFOX_FILES = ("logins.json", "key4.db", "cookies.sqlite")
 
-        edge_dir = os.path.join(local_app, "Microsoft", "Edge", "User Data")
-        targets["Edge"] = [
-            os.path.join(edge_dir, "Default", "Cookies"),
-            os.path.join(edge_dir, "Default", "Network", "Cookies"),
-        ]
+# Same category names SOAR's host agent uses for risk weights and MITRE mapping
+FILE_TYPES = {
+    "login data": "Saved Passwords DB",
+    "login data for account": "Saved Passwords DB",
+    "cookies": "CookieDB",
+    "web data": "Autofill & Credit Cards",
+    "local state": "LocalState (Master Key)",
+    "logins.json": "Firefox Saved Passwords",
+    "key4.db": "Firefox Key Database",
+    "cookies.sqlite": "Firefox CookieDB",
+    "wallet.dat": "Crypto Wallet",
+}
 
+
+@dataclass(frozen=True)
+class Target:
+    path: str
+    browser: str
+    file_type: str
+
+
+def file_type_for(path: str) -> str:
+    return FILE_TYPES.get(os.path.basename(path).lower(), "")
+
+
+def _candidate_targets(env: Mapping[str, str]) -> Iterable[Target]:
+    for var, folder, browser, profile_globs in CHROMIUM_ROOTS:
+        base = env.get(var)
+        if not base:
+            continue
+        root = os.path.join(base, folder)
+        yield Target(os.path.join(root, "Local State"), browser, file_type_for("Local State"))
+        profiles = set()
+        for pattern in profile_globs:
+            profiles.update(glob.glob(os.path.join(root, pattern)))
+        for profile in sorted(profiles):
+            for name in CHROMIUM_PROFILE_FILES:
+                path = os.path.normpath(os.path.join(profile, name))
+                yield Target(path, browser, file_type_for(path))
+
+    appdata = env.get("APPDATA")
     if appdata:
-        # Firefox profiles live in %APPDATA%/Mozilla/Firefox/Profiles/<random>.default*/
-        ff_profiles = os.path.join(appdata, "Mozilla", "Firefox", "Profiles")
-        ff_cookies: List[str] = []
-        if os.path.isdir(ff_profiles):
-            for profile in os.listdir(ff_profiles):
-                cookie_db = os.path.join(ff_profiles, profile, "cookies.sqlite")
-                ff_cookies.append(cookie_db)
-        targets["Firefox"] = ff_cookies
+        for profile in sorted(glob.glob(os.path.join(appdata, "Mozilla", "Firefox", "Profiles", "*"))):
+            for name in FIREFOX_FILES:
+                yield Target(os.path.join(profile, name), "Firefox", file_type_for(name))
+        bitcoin = os.path.join(appdata, "Bitcoin")
+        for path in [os.path.join(bitcoin, "wallet.dat")] + sorted(
+            glob.glob(os.path.join(bitcoin, "wallets", "*", "wallet.dat"))
+        ):
+            yield Target(path, "Bitcoin Core", file_type_for(path))
 
-    # Keep only paths that exist right now
-    resolved: Dict[str, List[Path]] = {}
-    for browser, paths in targets.items():
-        existing = [Path(p) for p in paths if os.path.exists(p)]
-        if existing:
-            resolved[browser] = existing
 
-    return resolved
+def resolve_targets(env: Optional[Mapping[str, str]] = None) -> List[Target]:
+    """Every sensitive file that exists right now for the current user."""
+    seen: Dict[str, Target] = {}
+    for target in _candidate_targets(os.environ if env is None else env):
+        key = target.path.lower()
+        if key not in seen and os.path.isfile(target.path):
+            seen[key] = target
+    return list(seen.values())
 
 
 def get_all_watch_paths() -> List[Path]:
-    """Flat list of every file we should monitor."""
-    paths: List[Path] = []
-    for file_list in _resolve_browser_paths().values():
-        paths.extend(file_list)
-    return paths
+    return [Path(t.path) for t in resolve_targets()]
 
-
-# ---------------------------------------------------------------------------
-# Heuristic: which process is touching the file?
-# ---------------------------------------------------------------------------
-
-def _identify_accessor(file_path: str) -> str:
-    """
-    Best-effort identification of the process holding a handle on *file_path*.
-    Falls back to active browser detection or 'unknown'.
-    """
-    try:
-        import psutil
-    except ImportError:
-        return "unknown"
-
-    file_lower = file_path.lower().replace("/", "\\")
-    active_procs = set()
-
-    for proc in psutil.process_iter(["pid", "name"]):
-        try:
-            name = (proc.info.get("name") or "").lower()
-            if name:
-                active_procs.add(name)
-            for f in proc.open_files():
-                if f.path.lower().replace("/", "\\") == file_lower:
-                    return proc.info["name"] or f"pid:{proc.info['pid']}"
-        except (psutil.AccessDenied, psutil.NoSuchProcess, OSError):
-            continue
-
-    # Fallback heuristic: correlate file path with known active browser processes
-    if "google\\chrome" in file_lower and "chrome.exe" in active_procs:
-        return "chrome.exe"
-    if "microsoft\\edge" in file_lower and "msedge.exe" in active_procs:
-        return "msedge.exe"
-    if "mozilla\\firefox" in file_lower and "firefox.exe" in active_procs:
-        return "firefox.exe"
-
-    return "unknown"
-
-
-# ---------------------------------------------------------------------------
-# CSV writer  (single file, appends)
-# ---------------------------------------------------------------------------
-
-class FileEventCsvWriter:
-    """Appends rows to hids/logs/file_events.csv."""
-
-    def __init__(self, log_dir: str = LOG_DIR, log_file: str = LOG_FILE):
-        self.log_dir = log_dir
-        self.path = os.path.join(log_dir, log_file)
-        self._file = None
-        self._writer: Optional[csv.DictWriter] = None
-
-    def open(self) -> None:
-        os.makedirs(self.log_dir, exist_ok=True)
-        new_file = not os.path.exists(self.path) or os.path.getsize(self.path) == 0
-        self._file = open(self.path, "a", newline="", encoding="utf-8")
-        self._writer = csv.DictWriter(self._file, fieldnames=FIELDS)
-        if new_file:
-            self._writer.writeheader()
-
-    def write(self, rows: List[Dict[str, Any]]) -> None:
-        if self._writer is None:
-            self.open()
-        if rows:
-            self._writer.writerows(rows)
-            self._file.flush()
-
-    def close(self) -> None:
-        if self._file:
-            self._file.close()
-        self._file = None
-        self._writer = None
-
-
-# ---------------------------------------------------------------------------
-# Watchdog event handler
-# ---------------------------------------------------------------------------
-
-def _map_event_type(event_type: str, is_new: bool) -> str:
-    """Map watchdog event constants to our schema (READ / MODIFY / CREATE)."""
-    if is_new or event_type == "created":
-        return "CREATE"
-    elif event_type in ("modified", "closed"):
-        return "MODIFY"
-    else:
-        return "READ"
-
-
-class _BrowserFileHandler:
-    """
-    Watchdog FileSystemEventHandler that filters for our target files only.
-    Collects events into a thread-safe list that the main loop drains.
-    """
-
-    def __init__(self, watched_files: List[Path]):
-        import threading
-        self._targets = {str(p).lower().replace("/", "\\"): str(p) for p in watched_files}
-        self._lock = threading.Lock()
-        self._pending: List[Dict[str, Any]] = []
-
-    def _match_target(self, path: str) -> Optional[str]:
-        p = path.lower().replace("/", "\\")
-        if p in self._targets:
-            return self._targets[p]
-        # Check SQLite WAL/journal/shm companions (e.g. Cookies-wal -> Cookies)
-        for target_low, target_orig in self._targets.items():
-            if p.startswith(target_low) and any(
-                p[len(target_low):] == suffix
-                for suffix in ("-wal", "-journal", "-shm", ".bak", "_temp")
-            ):
-                return target_orig
-        return None
-
-    def _record(self, event_type: str, src_path: str) -> None:
-        matched = self._match_target(src_path)
-        if not matched:
-            return
-        proc_name = _identify_accessor(src_path)
-        row = {
-            "timestamp": datetime.now().isoformat(timespec="milliseconds"),
-            "process": proc_name,
-            "file_path": matched,
-            "event_type": _map_event_type(event_type, is_new=(event_type == "created")),
-        }
-        print(f"  [EVENT] {row['event_type']} -> {matched} ({row['process']})")
-        with self._lock:
-            self._pending.append(row)
-
-    def drain(self) -> List[Dict[str, Any]]:
-        with self._lock:
-            batch, self._pending = self._pending, []
-        return batch
-
-    # --- watchdog callbacks ---
-    def on_modified(self, event):
-        if not event.is_directory:
-            self._record("modified", event.src_path)
-
-    def on_created(self, event):
-        if not event.is_directory:
-            self._record("created", event.src_path)
-
-    def on_closed(self, event):
-        if not getattr(event, "is_directory", False):
-            self._record("closed", event.src_path)
-
-
-# ---------------------------------------------------------------------------
-# Polling-based fallback (no watchdog dependency)
-# ---------------------------------------------------------------------------
-
-class _PollingWatcher:
-    """
-    Simple stat-based poller used when watchdog is unavailable or
-    when the user explicitly requests polling mode.
-    Tracks mtime + size of each target file and emits events on change.
-    """
-
-    def __init__(self, watched_files: List[Path]):
-        self._files = watched_files
-        self._state: Dict[str, tuple] = {}
-        # Seed with current state so we don't fire on startup
-        for f in self._files:
-            key = str(f)
-            try:
-                st = os.stat(f)
-                self._state[key] = (st.st_mtime, st.st_size)
-            except OSError:
-                pass  # file doesn't exist yet
-
-    def poll(self) -> List[Dict[str, Any]]:
-        rows: List[Dict[str, Any]] = []
-        for f in self._files:
-            key = str(f)
-            try:
-                st = os.stat(f)
-            except OSError:
-                continue
-            current = (st.st_mtime, st.st_size)
-            prev = self._state.get(key)
-            if prev is None:
-                # File appeared
-                rows.append(self._row(key, "CREATE"))
-            elif current != prev:
-                rows.append(self._row(key, "MODIFY"))
-            self._state[key] = current
-        return rows
-
-    @staticmethod
-    def _row(path: str, event_type: str) -> Dict[str, Any]:
-        return {
-            "timestamp": datetime.now().isoformat(timespec="milliseconds"),
-            "process": _identify_accessor(path),
-            "file_path": path,
-            "event_type": event_type,
-        }
-
-
-# ---------------------------------------------------------------------------
-# Legacy helpers (kept so existing imports from the stub don't break)
-# ---------------------------------------------------------------------------
 
 SENSITIVE_GLOBS = [
-    "**/Google/Chrome/User Data/**/Cookies",
-    "**/Google/Chrome/User Data/Local State",
-    "**/Microsoft/Edge/User Data/**/Cookies",
-    "**/Mozilla/Firefox/Profiles/**/cookies.sqlite",
+    "**/<Chromium browser>/User Data/<profile>/Login Data",
+    "**/<Chromium browser>/User Data/<profile>/Login Data For Account",
+    "**/<Chromium browser>/User Data/<profile>/Cookies",
+    "**/<Chromium browser>/User Data/<profile>/Network/Cookies",
+    "**/<Chromium browser>/User Data/<profile>/Web Data",
+    "**/<Chromium browser>/User Data/Local State",
+    "**/Mozilla/Firefox/Profiles/*/logins.json",
+    "**/Mozilla/Firefox/Profiles/*/key4.db",
+    "**/Mozilla/Firefox/Profiles/*/cookies.sqlite",
+    "**/Bitcoin/**/wallet.dat",
 ]
 
 
@@ -315,126 +189,494 @@ def describe_watch_targets() -> List[str]:
 
 
 def path_looks_sensitive(path: str | Path) -> bool:
-    text = str(path).lower().replace("\\", "/")
-    needles = ("cookies", "local state", "cookies.sqlite")
-    return any(n in text for n in needles)
+    return bool(file_type_for(str(path)))
+
+
+# ---------------------------------------------------------------------------
+# Process attribution
+# ---------------------------------------------------------------------------
+
+def accessor_is_owner(exe_path: str, browser: str) -> Optional[bool]:
+    """True only for the browser's own executable in its real install folder."""
+    owner = BROWSERS.get(browser)
+    if not exe_path or owner is None:
+        return None
+    lower = exe_path.lower()
+    return os.path.basename(lower) == owner.exe and owner.install_marker in lower
+
+
+def describe_process(pid: int, exe_path: str = "") -> Dict[str, Any]:
+    """create_time and parent of a live PID, empty if it exited or the PID was reused."""
+    try:
+        import psutil
+
+        proc = psutil.Process(pid)
+        with proc.oneshot():
+            try:
+                exe = proc.exe()
+            except (psutil.AccessDenied, OSError):
+                exe = ""
+            if exe_path and exe and os.path.normcase(exe) != os.path.normcase(exe_path):
+                return {}
+            info: Dict[str, Any] = {"create_time": round(proc.create_time(), 3)}
+            try:
+                parent = proc.parent()
+                if parent is not None and parent.create_time() <= proc.create_time():
+                    info["parent_name"] = parent.name()
+            except (psutil.Error, OSError):
+                pass
+            return info
+    except Exception:
+        return {}
+
+
+# ---------------------------------------------------------------------------
+# Rows
+# ---------------------------------------------------------------------------
+
+def build_row(
+    ts: float,
+    event_type: str,
+    target: Target,
+    source: str,
+    pid: Optional[int] = None,
+    exe_path: str = "",
+    process_name: str = "",
+    create_time: Optional[float] = None,
+    parent_name: str = "",
+    access_mask: Optional[int] = None,
+) -> Dict[str, Any]:
+    owner = accessor_is_owner(exe_path, target.browser)
+    return {
+        "timestamp": round(ts, 3),
+        "time_iso": datetime.fromtimestamp(ts).isoformat(timespec="milliseconds"),
+        "event_type": event_type,
+        "pid": pid if pid else "",
+        "create_time": create_time if create_time else "",
+        "process_name": process_name or (os.path.basename(exe_path) if exe_path else "unknown"),
+        "exe_path": exe_path,
+        "parent_name": parent_name,
+        "file_path": target.path,
+        "file_type": target.file_type,
+        "browser": target.browser,
+        "accessor_is_owner": "" if owner is None else int(owner),
+        "access_mask": f"0x{access_mask:x}" if access_mask is not None else "",
+        "source": source,
+    }
+
+
+HOST_EVENT_KEYS = ("pid", "process_name", "exe_path", "parent_name", "file_path", "file_type", "event_type")
+
+
+def to_host_event(row: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    """Row -> dict accepted by SOAR (process_host_event / POST /api/host/events/ingest)."""
+    if not row.get("pid"):
+        return None
+    event = {key: row[key] for key in HOST_EVENT_KEYS if row.get(key) not in (None, "")}
+    event["pid"] = int(event["pid"])
+    return event
+
+
+class Deduper:
+    """Drops repeats of the same (pid, file, event) inside a short window."""
+
+    def __init__(self, window: float = DEDUP_WINDOW):
+        self.window = window
+        self._last: Dict[Tuple[Any, str, str], float] = {}
+
+    def allow(self, row: Mapping[str, Any]) -> bool:
+        key = (row.get("pid"), str(row.get("file_path", "")).lower(), str(row.get("event_type")))
+        ts = float(row["timestamp"])
+        last = self._last.get(key)
+        if last is not None and ts - last < self.window:
+            return False
+        self._last[key] = ts
+        if len(self._last) > 10000:
+            cutoff = ts - self.window
+            self._last = {k: v for k, v in self._last.items() if v >= cutoff}
+        return True
+
+
+# ---------------------------------------------------------------------------
+# Windows auditing (event 4663)
+# ---------------------------------------------------------------------------
+
+Runner = Callable[..., subprocess.CompletedProcess]
+
+
+def is_admin() -> bool:
+    try:
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except (AttributeError, OSError):
+        return False
+
+
+def set_audit_policy(enabled: bool, run: Runner = subprocess.run) -> bool:
+    flag = "enable" if enabled else "disable"
+    result = run(
+        ["auditpol", "/set", f"/subcategory:{FILE_SYSTEM_SUBCATEGORY}", f"/success:{flag}"],
+        capture_output=True, text=True,
+    )
+    return result.returncode == 0
+
+
+_SACL_SCRIPT = """
+$ErrorActionPreference = 'Stop'
+$sid = New-Object System.Security.Principal.SecurityIdentifier('{sid}')
+$rule = New-Object System.Security.AccessControl.FileSystemAuditRule($sid, '{rights}', 'None', 'None', 'Success')
+foreach ($p in $env:SENTINEL_AUDIT_PATHS.Split('|')) {{
+    try {{
+        $acl = [System.IO.File]::GetAccessControl($p, [System.Security.AccessControl.AccessControlSections]::Audit)
+        {action}
+        [System.IO.File]::SetAccessControl($p, $acl)
+        "OK`t$p"
+    }} catch {{
+        "FAIL`t$p`t$($_.Exception.Message)"
+    }}
+}}
+"""
+
+
+def set_audit_rules(paths: List[str], add: bool = True, run: Runner = subprocess.run) -> Dict[str, str]:
+    """Add (or remove) the audit rule on each file. Returns {path: error} for failures.
+
+    Only the SACL is written; owner and permissions are untouched.
+    """
+    if not paths:
+        return {}
+    action = "$acl.AddAuditRule($rule)" if add else "[void]$acl.RemoveAuditRuleAll($rule)"
+    script = _SACL_SCRIPT.format(sid=EVERYONE_SID, rights=AUDIT_RIGHTS, action=action)
+    env = dict(os.environ, SENTINEL_AUDIT_PATHS="|".join(paths))
+    result = run(
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+        capture_output=True, text=True, env=env, timeout=120,
+    )
+    done = set()
+    failures: Dict[str, str] = {}
+    for line in (result.stdout or "").splitlines():
+        parts = line.strip().split("\t")
+        if len(parts) >= 2 and parts[0] == "OK":
+            done.add(parts[1])
+        elif len(parts) >= 2 and parts[0] == "FAIL":
+            failures[parts[1]] = parts[2] if len(parts) > 2 else "unknown error"
+    for path in paths:
+        if path not in done and path not in failures:
+            failures[path] = (result.stderr or "no output from PowerShell").strip()
+    return failures
+
+
+def parse_system_time(value: str) -> float:
+    """'2026-10-01T11:47:00.1234567Z' -> epoch seconds."""
+    text = value.strip().rstrip("Z")
+    if "." in text:
+        head, frac = text.split(".", 1)
+        text = f"{head}.{(frac + '000000')[:6]}"
+    return datetime.fromisoformat(text).replace(tzinfo=timezone.utc).timestamp()
+
+
+def parse_events_xml(text: str) -> List[Dict[str, Any]]:
+    """wevtutil /f:xml output (concatenated <Event> elements) -> list of events."""
+    body = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("<?xml"))
+    if not body.strip():
+        return []
+    events = []
+    for node in ET.fromstring(f"<Events>{body}</Events>"):
+        system = node.find(f"{EVENT_NS}System")
+        if system is None:
+            continue
+        created = system.find(f"{EVENT_NS}TimeCreated")
+        data = {
+            item.get("Name"): (item.text or "")
+            for item in node.iter(f"{EVENT_NS}Data")
+            if item.get("Name")
+        }
+        events.append({
+            "event_id": int(system.findtext(f"{EVENT_NS}EventID") or 0),
+            "record_id": int(system.findtext(f"{EVENT_NS}EventRecordID") or 0),
+            "time": parse_system_time(created.get("SystemTime")) if created is not None else time.time(),
+            "data": data,
+        })
+    return events
+
+
+def access_event_type(mask: int) -> Optional[str]:
+    if mask & DELETE:
+        return "DELETE"
+    if mask & (WRITE_DATA | APPEND_DATA):
+        return "MODIFY"
+    if mask & READ_DATA:
+        return "READ"
+    return None
+
+
+def _int(value: str) -> Optional[int]:
+    try:
+        return int(value, 0)
+    except (TypeError, ValueError):
+        return None
+
+
+def audit_row(
+    event: Mapping[str, Any],
+    targets: Mapping[str, Target],
+    exclude_pids: Iterable[int] = (),
+) -> Optional[Dict[str, Any]]:
+    """4663 event -> CSV row, or None if it isn't about one of our targets."""
+    if event.get("event_id") != 4663:
+        return None
+    data = event.get("data", {})
+    target = targets.get(os.path.normcase(data.get("ObjectName", "")))
+    if target is None:
+        return None
+    pid = _int(data.get("ProcessId", ""))
+    mask = _int(data.get("AccessMask", ""))
+    if not pid or pid in set(exclude_pids) or mask is None:
+        return None
+    event_type = access_event_type(mask)
+    if event_type is None:
+        return None
+    return build_row(
+        event["time"], event_type, target, "audit",
+        pid=pid, exe_path=data.get("ProcessName", ""), access_mask=mask,
+    )
+
+
+class SecurityLogReader:
+    """Reads new 4663 events from the Security log with wevtutil (no extra packages)."""
+
+    BATCH = 500
+
+    def __init__(self, run: Runner = subprocess.run):
+        self._run = run
+        self.last_record = 0
+
+    def _query(self, xpath: str, count: int, newest_first: bool = False) -> str:
+        cmd = ["wevtutil", "qe", "Security", f"/q:{xpath}", "/f:xml", f"/c:{count}"]
+        if newest_first:
+            cmd.append("/rd:true")
+        result = self._run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if result.returncode != 0:
+            raise RuntimeError(f"wevtutil failed: {(result.stderr or '').strip()}")
+        return result.stdout or ""
+
+    def start(self) -> None:
+        """Skip everything already in the log."""
+        newest = parse_events_xml(self._query("*", 1, newest_first=True))
+        self.last_record = newest[0]["record_id"] if newest else 0
+
+    def read_new(self) -> List[Dict[str, Any]]:
+        events: List[Dict[str, Any]] = []
+        while True:
+            xpath = f"*[System[(EventID=4663) and (EventRecordID>{self.last_record})]]"
+            batch = parse_events_xml(self._query(xpath, self.BATCH))
+            if not batch:
+                break
+            events.extend(batch)
+            self.last_record = max(e["record_id"] for e in batch)
+            if len(batch) < self.BATCH:
+                break
+        return events
+
+
+# ---------------------------------------------------------------------------
+# File state (poll mode rows, and re-arming audit rules on replaced files)
+# ---------------------------------------------------------------------------
+
+FileState = Tuple[int, int, int]
+
+
+def _stat(path: str) -> Optional[FileState]:
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return st.st_ino, st.st_mtime_ns, st.st_size
+
+
+class FileStateTracker:
+    """CREATE / MODIFY / REPLACE / DELETE from file identity, mtime and size.
+
+    REPLACE means a new file now sits at the path (atomic save, or a stealer
+    swapping the file); audit rules don't carry over and must be re-applied.
+    """
+
+    def __init__(self, targets: Iterable[Target]):
+        self.targets: Dict[str, Target] = {}
+        self._state: Dict[str, Optional[FileState]] = {}
+        self.add(targets)
+
+    def add(self, targets: Iterable[Target]) -> List[Target]:
+        added = []
+        for target in targets:
+            key = os.path.normcase(target.path)
+            if key not in self.targets:
+                self.targets[key] = target
+                self._state[key] = _stat(target.path)
+                added.append(target)
+        return added
+
+    def poll(self) -> List[Tuple[Target, str]]:
+        changes = []
+        for key, target in self.targets.items():
+            prev, cur = self._state[key], _stat(target.path)
+            if prev is None and cur is not None:
+                changes.append((target, "CREATE"))
+            elif prev is not None and cur is None:
+                changes.append((target, "DELETE"))
+            elif prev is not None and cur is not None:
+                if cur[0] != prev[0]:
+                    changes.append((target, "REPLACE"))
+                elif cur != prev:
+                    changes.append((target, "MODIFY"))
+            self._state[key] = cur
+        return changes
+
+
+def poll_rows(changes: Iterable[Tuple[Target, str]], now: float) -> List[Dict[str, Any]]:
+    return [
+        build_row(now, "MODIFY" if change == "REPLACE" else change, target, "poll")
+        for target, change in changes
+    ]
 
 
 # ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
 
+def _arm(paths: List[str]) -> None:
+    for path, error in set_audit_rules(paths).items():
+        print(f"  [WARN] could not audit {path}: {error}")
+
+
 def run(
+    mode: str = "auto",
     poll_interval: float = POLL_INTERVAL,
     log_dir: str = LOG_DIR,
     duration: float = 0.0,
+    dedup_window: float = DEDUP_WINDOW,
 ) -> None:
-    """
-    Start watching browser files for access / modification.
-
-    Tries the *watchdog* library first (inotify / ReadDirectoryChangesW).
-    Falls back to polling if watchdog is not installed.
-    """
-    watch_paths = get_all_watch_paths()
-    if not watch_paths:
-        print("No browser cookie/credential files found on this machine.")
-        print("Resolved targets would be:")
-        for g in describe_watch_targets():
-            print(f"  {g}")
+    admin = is_admin()
+    if mode == "auto":
+        mode = "audit" if admin else "poll"
+    if mode == "audit" and not admin:
+        print("Audit mode needs an Administrator PowerShell (it reads the Security log and sets audit rules).")
         return
 
-    out = FileEventCsvWriter(log_dir)
-    out.open()
+    tracker = FileStateTracker(resolve_targets())
+    if not tracker.targets:
+        print("No browser credential files found for this user. Targets would be:")
+        for pattern in describe_watch_targets():
+            print(f"  {pattern}")
+        return
 
-    # Collect the parent directories we need to watch
-    watch_dirs = list({str(p.parent) for p in watch_paths})
+    reader: Optional[SecurityLogReader] = None
+    if mode == "audit":
+        if not set_audit_policy(True):
+            print("auditpol failed to enable File System auditing.")
+            return
+        _arm([t.path for t in tracker.targets.values()])
+        reader = SecurityLogReader()
+        reader.start()
+    else:
+        print("Poll mode: only CREATE / MODIFY / DELETE, no reads and no process. Run as Administrator for audit mode.")
 
-    use_watchdog = False
-    observer = None
-    handler = None
+    out = DailyCsvWriter(log_dir, prefix=LOG_PREFIX, fields=FIELDS)
+    dedup = Deduper(dedup_window)
+    own_pids = {os.getpid()}
+    logged = ticks = overruns = 0
+    start = next_tick = time.monotonic()
+    last_rescan = time.time()
 
-    try:
-        from watchdog.observers import Observer
-        from watchdog.events import FileSystemEventHandler
-
-        # Build a proper watchdog handler class by composing our helper
-        class _Handler(FileSystemEventHandler):
-            def __init__(self, inner: _BrowserFileHandler):
-                super().__init__()
-                self._inner = inner
-
-            def on_modified(self, event):
-                self._inner.on_modified(event)
-
-            def on_created(self, event):
-                self._inner.on_created(event)
-
-            def on_closed(self, event):
-                self._inner.on_closed(event)
-
-        handler = _BrowserFileHandler(watch_paths)
-        observer = Observer()
-        for d in watch_dirs:
-            observer.schedule(_Handler(handler), d, recursive=False)
-        observer.start()
-        use_watchdog = True
-        mode = "watchdog"
-    except ImportError:
-        mode = "polling"
-
-    poller = None if use_watchdog else _PollingWatcher(watch_paths)
-
-    events_logged = 0
-    start = time.monotonic()
-
-    print(f"File sensor ({mode}) watching {len(watch_paths)} file(s):")
-    for p in watch_paths:
-        print(f"  {p}")
-    print(f"Logging to {out.path}")
+    print(f"File sensor ({mode}) watching {len(tracker.targets)} file(s):")
+    for target in tracker.targets.values():
+        print(f"  [{target.browser}] {target.path}")
     print("Press Ctrl+C to stop.")
 
     try:
         while True:
-            if use_watchdog:
-                rows = handler.drain()
-            else:
-                rows = poller.poll()
+            now = time.time()
+            if now - last_rescan >= RESCAN_EVERY:
+                added = tracker.add(resolve_targets())
+                if added and reader is not None:
+                    _arm([t.path for t in added])
+                last_rescan = now
 
-            if rows:
-                out.write(rows)
-                events_logged += len(rows)
+            changes = tracker.poll()
+            if reader is not None:
+                rearm = [t.path for t, change in changes if change in ("CREATE", "REPLACE")]
+                if rearm:
+                    _arm(rearm)
+                rows = []
+                for event in reader.read_new():
+                    row = audit_row(event, tracker.targets, own_pids)
+                    if row is not None:
+                        row.update(describe_process(int(row["pid"]), row["exe_path"]))
+                        rows.append(row)
+            else:
+                rows = poll_rows(changes, now)
+
+            rows = [r for r in rows if dedup.allow(r)]
+            for r in rows:
+                owner = {1: "owner", 0: "NOT OWNER"}.get(r["accessor_is_owner"], "?")
+                print(f"  [{r['event_type']}] {r['process_name']} (pid {r['pid'] or '?'}, {owner}) -> {r['file_path']}")
+            out.write(rows, now)
+            logged += len(rows)
+            ticks += 1
 
             if duration and time.monotonic() - start >= duration:
                 break
-
-            time.sleep(poll_interval)
+            next_tick += poll_interval
+            delay = next_tick - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
+            else:
+                overruns += 1
+                next_tick = time.monotonic()
     except KeyboardInterrupt:
         pass
     finally:
-        if observer is not None:
-            observer.stop()
-            observer.join()
         out.close()
-        elapsed = round(time.monotonic() - start, 1)
-        print(f"\nStopped after {elapsed}s — {events_logged} event(s) logged to {out.path}")
+        print(f"\nStopped after {ticks} checks ({overruns} late), {logged} event(s). Log: {out.path}")
+        if mode == "audit":
+            print("Audit rules are still on the files. Remove them with: python -m hids.file_monitor --remove-audit")
+
+
+def remove_audit() -> None:
+    if not is_admin():
+        print("Run as Administrator to remove audit rules.")
+        return
+    paths = [t.path for t in resolve_targets()]
+    failures = set_audit_rules(paths, add=False)
+    print(f"Removed audit rules from {len(paths) - len(failures)} of {len(paths)} file(s).")
+    for path, error in failures.items():
+        print(f"  [WARN] {path}: {error}")
+    if set_audit_policy(False):
+        print("File System auditing disabled.")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="SentinelAI HIDS file sensor (Role 2)")
-    parser.add_argument(
-        "--poll-interval", type=float, default=POLL_INTERVAL,
-        help=f"Seconds between poll/drain ticks (default {POLL_INTERVAL})",
-    )
-    parser.add_argument(
-        "--log-dir", default=LOG_DIR,
-        help="Output folder (default hids/logs)",
-    )
-    parser.add_argument(
-        "--duration", type=float, default=0.0,
-        help="Stop after N seconds (0 = run until Ctrl+C)",
-    )
+    parser = argparse.ArgumentParser(description="SentinelAI HIDS browser credential file sensor")
+    parser.add_argument("--mode", choices=("auto", "audit", "poll"), default="auto",
+                        help="audit needs Administrator; auto picks audit when elevated")
+    parser.add_argument("--poll-interval", type=float, default=POLL_INTERVAL,
+                        help=f"Seconds between checks (default {POLL_INTERVAL})")
+    parser.add_argument("--log-dir", default=LOG_DIR, help="Output folder (default hids/logs)")
+    parser.add_argument("--duration", type=float, default=0.0, help="Stop after N seconds (0 = until Ctrl+C)")
+    parser.add_argument("--dedup-window", type=float, default=DEDUP_WINDOW,
+                        help=f"Seconds to suppress repeats of the same pid/file/event (default {DEDUP_WINDOW})")
+    parser.add_argument("--list-targets", action="store_true", help="Print the files that would be watched and exit")
+    parser.add_argument("--remove-audit", action="store_true", help="Remove audit rules and disable File System auditing")
     args = parser.parse_args()
-    run(poll_interval=args.poll_interval, log_dir=args.log_dir, duration=args.duration)
+
+    if args.list_targets:
+        for target in resolve_targets():
+            print(f"[{target.browser}] {target.file_type}: {target.path}")
+        return
+    if args.remove_audit:
+        remove_audit()
+        return
+    run(mode=args.mode, poll_interval=args.poll_interval, log_dir=args.log_dir,
+        duration=args.duration, dedup_window=args.dedup_window)
 
 
 if __name__ == "__main__":

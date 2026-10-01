@@ -260,16 +260,18 @@ class ProcessTracker:
 # -------------------------------------------------------------
 
 class DailyCsvWriter:
-    """Appends rows to process_events_YYYY-MM-DD.csv, switching files at midnight."""
+    """Appends rows to <prefix>_YYYY-MM-DD.csv, switching files at midnight."""
 
-    def __init__(self, log_dir: str = LOG_DIR):
+    def __init__(self, log_dir: str = LOG_DIR, prefix: str = "process_events", fields: List[str] = FIELDS):
         self.log_dir = log_dir
+        self.prefix = prefix
+        self.fields = fields
         self.path: Optional[str] = None
         self._file = None
         self._writer: Optional[csv.DictWriter] = None
 
     def write(self, rows: List[Dict[str, Any]], now: float) -> None:
-        path = os.path.join(self.log_dir, f"process_events_{datetime.fromtimestamp(now):%Y-%m-%d}.csv")
+        path = os.path.join(self.log_dir, f"{self.prefix}_{datetime.fromtimestamp(now):%Y-%m-%d}.csv")
         if path != self.path or self._file is None:
             self._open(path)
         if rows:
@@ -281,7 +283,7 @@ class DailyCsvWriter:
         os.makedirs(self.log_dir, exist_ok=True)
         new_file = not os.path.exists(path) or os.path.getsize(path) == 0
         self._file = open(path, "a", newline="", encoding="utf-8")
-        self._writer = csv.DictWriter(self._file, fieldnames=FIELDS)
+        self._writer = csv.DictWriter(self._file, fieldnames=self.fields)
         if new_file:
             self._writer.writeheader()
         self.path = path
