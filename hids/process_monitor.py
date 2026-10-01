@@ -246,7 +246,7 @@ class ProcessTracker:
     def _summary_row(self, now: float, event: str, run: ProcessRun) -> Dict[str, Any]:
         row = self._row(now, event, run)
         if run.create_time > 0:
-            row["lifetime_s"] = round(run.last_seen - run.create_time, 1)
+            row["lifetime_s"] = max(0.0,round(run.last_seen - run.create_time, 1))
         row["samples"] = run.samples
         if run.cpu_n:
             row["cpu_mean"] = round(run.cpu_sum / run.cpu_n, 2)
