@@ -1,1 +1,1 @@
-"""SentinelAI HIDS — Windows host monitoring (Phase 5 stubs)."""
+"""SentinelAI HIDS — Windows host monitoring (Phase 5)."""

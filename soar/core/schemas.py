@@ -164,6 +164,7 @@ class AlertMessage:
     risk_score: float = 0.0
     action_taken: str = ""
     channels: List[str] = field(default_factory=lambda: ["DASHBOARD", "CONSOLE"])
+    source: str = "NIDS"  # NIDS or HIDS
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
@@ -295,6 +296,8 @@ class HostIncident:
     action_status: str = "PENDING"  # SUCCESS, SIMULATED, FAILED, PENDING
     remediation_notes: str = ""
     raw_event: Dict[str, Any] = field(default_factory=dict)
+    alert: Optional[AlertMessage] = None
+    llm_explanation: Optional[LLMExplanation] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -315,6 +318,8 @@ class HostIncident:
             "soar_action": self.soar_action.value,
             "action_status": self.action_status,
             "remediation_notes": self.remediation_notes,
-            "raw_event": self.raw_event
+            "raw_event": self.raw_event,
+            "alert": self.alert.to_dict() if self.alert else None,
+            "llm_explanation": self.llm_explanation.to_dict() if self.llm_explanation else None,
         }
 

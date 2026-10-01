@@ -12,7 +12,7 @@ from typing import Dict, List, Any, Optional, Callable
 import httpx
 
 from agents.base_agent import BaseAgent
-from core.schemas import Incident, AlertMessage, SeverityLevel
+from core.schemas import Incident, HostIncident, AlertMessage, SeverityLevel
 from core.event_bus import EventBus, Event
 
 logger = logging.getLogger("SentinelAI.AlertAgent")
@@ -85,8 +85,6 @@ class AlertAgent(BaseAgent):
             f"MITRE: {incident.threat.mitre_technique_id} - {incident.threat.mitre_technique_name}"
         )
 
-        channels_used = ["CONSOLE", "DASHBOARD"]
-        
         alert = AlertMessage(
             severity=sev,
             title=title,
@@ -96,8 +94,43 @@ class AlertAgent(BaseAgent):
             attack_type=attack,
             risk_score=incident.risk.score,
             action_taken=action,
-            channels=channels_used
+            channels=["CONSOLE", "DASHBOARD"],
+            source="NIDS",
         )
+        toast = f"{attack} from {src_ip} (Risk {incident.risk.score}/10). Action: {action}"
+        return self._fan_out(alert, toast)
+
+    def dispatch_host_alert(self, incident: HostIncident) -> AlertMessage:
+        """Construct and broadcast a HIDS host incident alert across enabled channels."""
+        proc = incident.process
+        action = incident.soar_action.value
+        mitre = f"{incident.mitre_technique_id} - {incident.mitre_technique_name}" if incident.mitre_technique_id else "Unmapped"
+
+        title = f"🚨 [SentinelAI HIDS Alert] {incident.severity.value} Threat: {incident.classification}"
+        msg = (
+            f"Process: {proc.process_name} (PID {proc.pid}, parent {proc.parent_name or 'unknown'})\n"
+            f"File: {incident.file_event.file_path} [{incident.file_event.event_type}]\n"
+            f"Risk Score: {incident.risk_score}/10 | Conf: {incident.confidence * 100:.1f}%\n"
+            f"Autonomous Action: {action} ({incident.action_status})\n"
+            f"MITRE: {mitre}"
+        )
+
+        alert = AlertMessage(
+            severity=incident.severity,
+            title=title,
+            message=msg,
+            attack_type=incident.classification,
+            risk_score=incident.risk_score,
+            action_taken=action,
+            channels=["CONSOLE", "DASHBOARD"],
+            source="HIDS",
+        )
+        toast = f"{proc.process_name} touched {incident.file_event.file_type} (Risk {incident.risk_score}/10). Action: {action}"
+        return self._fan_out(alert, toast)
+
+    def _fan_out(self, alert: AlertMessage, toast_message: str) -> AlertMessage:
+        """Broadcast an alert to dashboard queue, callbacks, desktop, Telegram and console."""
+        channels_used = alert.channels
 
         # 1. Dashboard Queue Broadcast (For Member 4)
         try:
@@ -117,13 +150,13 @@ class AlertAgent(BaseAgent):
                     logger.error("Error in dashboard alert callback: %s", exc)
 
         # 2. Desktop Toast Notification
-        if self.enable_desktop and sev in (SeverityLevel.HIGH, SeverityLevel.CRITICAL):
-            self._send_desktop_notification(title, f"{attack} from {src_ip} (Risk {incident.risk.score}/10). Action: {action}")
+        if self.enable_desktop and alert.severity in (SeverityLevel.HIGH, SeverityLevel.CRITICAL):
+            self._send_desktop_notification(alert.title, toast_message)
             channels_used.append("DESKTOP")
 
         # 3. Optional Telegram Webhook
         if self.enable_telegram and self.telegram_token and self.telegram_chat_id:
-            self._send_telegram_notification(f"{title}\n\n{msg}")
+            self._send_telegram_notification(f"{alert.title}\n\n{alert.message}")
             channels_used.append("TELEGRAM")
 
         # 4. Rich Console Log (disable for batch scorecards)

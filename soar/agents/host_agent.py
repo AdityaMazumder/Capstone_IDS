@@ -1,10 +1,13 @@
 """
 SentinelAI - Host Intrusion Detection System (HIDS) SOAR Agent
-Role: Member 5 — SOAR and Documentation Lead (Phase 5)
+Role: Member 4 — SOAR / Risk / Response (Phase 5)
 
 Correlates process monitoring (psutil) and sensitive file access (watchdog),
 evaluates InfoStealer behaviors, calculates host risk scores, maps to MITRE ATT&CK,
 and autonomously executes host mitigations (process termination, alerting, and logging).
+
+The heuristic classifier and MITRE table below are interim placeholders: Member 2's
+HIDS model (sent as `label`) and Member 3's threat-analysis module are meant to replace them.
 """
 
 from __future__ import annotations
@@ -30,9 +33,19 @@ from core.schemas import (
     HostActionType,
     SeverityLevel
 )
-from core.event_bus import EventBus
+from core.event_bus import EventBus, Event
 
 logger = logging.getLogger("SentinelAI.HostAgent")
+
+# ML labels accepted from Member 2's HIDS model, mapped to the classification SOAR reports
+ML_LABELS = {
+    "normal": "Normal",
+    "benign": "Normal",
+    "stealer": "Stealer",
+    "infostealer": "Stealer",
+    "ransomware": "Ransomware",
+    "malware": "Malware",
+}
 
 
 # List of sensitive files typically targeted by InfoStealers (RedLine, Vidar, Lumma, Racoon)
@@ -67,15 +80,13 @@ class HostSOARAgent(BaseAgent):
         self.total_processes_killed = 0
 
     def _on_initialize(self) -> None:
-        """Subscribe to host telemetry topics."""
-        if self.event_bus:
-            self.event_bus.subscribe("host.event.ingested", self.process, priority=10)
-            self.event_bus.subscribe("host.model.prediction", self.process, priority=10)
+        # Bus topics (host.event.ingested / host.model.prediction) are subscribed by
+        # SentinelOrchestrator so bus events are also persisted, alerted and explained.
         logger.info("HostSOARAgent initialized (Dry-Run: %s).", self.dry_run)
 
     def _handle_event(self, event: Any) -> Optional[HostIncident]:
         """Handle incoming event bus Event or raw dict."""
-        data = event.payload if hasattr(event, "payload") else event
+        data = event.data if hasattr(event, "data") else event
         return self.process_host_event(data)
 
     def process_host_event(self, event: Any) -> HostIncident:
@@ -91,10 +102,16 @@ class HostSOARAgent(BaseAgent):
             
             process_info = self._extract_process_info(raw_data)
             file_event = self._extract_file_event(raw_data)
-            label = raw_data.get("label", raw_data.get("classification", ""))
+            label = raw_data.get("label") or raw_data.get("classification") or ""
 
             # 2. Correlate and classify if not pre-labeled by ML model
-            classification, confidence, anomaly_score = self._classify_host_behavior(process_info, file_event, label)
+            classification, confidence, anomaly_score = self._classify_host_behavior(
+                process_info,
+                file_event,
+                label,
+                ml_confidence=raw_data.get("confidence"),
+                ml_anomaly_score=raw_data.get("anomaly_score"),
+            )
 
             # 3. Calculate Host Risk Score
             risk_score, severity = self._calculate_host_risk(process_info, file_event, classification, confidence, anomaly_score)
@@ -133,19 +150,9 @@ class HostSOARAgent(BaseAgent):
             self.average_latency_ms = ((self.average_latency_ms * 0.9) + (latency * 0.1)) if self.total_processed > 0 else latency
             self.total_processed += 1
 
-            # 8. Publish to EventBus
+            # 8. Publish to EventBus (alert fan-out is done by AlertAgent via the orchestrator)
             if self.event_bus:
-                self.event_bus.publish("host.incident.created", incident.to_dict())
-                if incident.severity in (SeverityLevel.HIGH, SeverityLevel.CRITICAL):
-                    self.event_bus.publish("host.alert.dispatched", {
-                        "title": f"🚨 [HIDS Alert] {incident.classification} Attack on Host",
-                        "incident_id": incident.incident_id,
-                        "process": incident.process.process_name,
-                        "pid": incident.process.pid,
-                        "risk_score": incident.risk_score,
-                        "action": incident.soar_action.value,
-                        "mitre": f"{incident.mitre_technique_id} - {incident.mitre_technique_name}"
-                    })
+                self.event_bus.publish("host.incident.created", incident.to_dict(), sender=self.name)
 
             return incident
 
@@ -167,17 +174,17 @@ class HostSOARAgent(BaseAgent):
         return HostProcessInfo(
             pid=int(data.get("pid", 0)),
             process_name=str(data.get("process_name", data.get("process", "unknown.exe"))).lower(),
-            parent_name=str(data.get("parent_name", data.get("parent", "explorer.exe"))).lower(),
+            parent_name=str(data.get("parent_name") or data.get("parent") or "").lower(),
             cpu_percent=float(data.get("cpu_percent", data.get("cpu", 0.0))),
             memory_mb=float(data.get("memory_mb", data.get("memory", 0.0))),
-            exe_path=str(data.get("exe_path", "")),
-            cmdline=data.get("cmdline", [])
+            exe_path=str(data.get("exe_path") or ""),
+            cmdline=data.get("cmdline") or []
         )
 
     def _extract_file_event(self, data: Dict[str, Any]) -> HostFileEvent:
         """Extract file access metadata from input dictionary."""
-        file_path = str(data.get("file_path", data.get("file", "")))
-        file_type = data.get("file_type", "")
+        file_path = str(data.get("file_path") or data.get("file") or "")
+        file_type = data.get("file_type") or ""
         
         if not file_type:
             # Auto-detect file type from path
@@ -191,7 +198,7 @@ class HostSOARAgent(BaseAgent):
         return HostFileEvent(
             file_path=file_path,
             file_type=file_type,
-            event_type=str(data.get("event_type", data.get("event", "READ"))).upper(),
+            event_type=str(data.get("event_type") or data.get("event") or "READ").upper(),
             target_browser=self._detect_browser_from_path(file_path)
         )
 
@@ -211,16 +218,20 @@ class HostSOARAgent(BaseAgent):
         self,
         process: HostProcessInfo,
         file_event: HostFileEvent,
-        preset_label: str
+        preset_label: str,
+        ml_confidence: Optional[float] = None,
+        ml_anomaly_score: Optional[float] = None,
     ) -> tuple[str, float, float]:
         """
         Correlate process and file access to determine if action is Normal or InfoStealer.
         """
-        # If pre-classified by Member 4's ML model:
-        if preset_label and preset_label.lower() in ("stealer", "malware", "ransomware"):
-            return "Stealer", 0.95, 0.88
-        if preset_label and preset_label.lower() == "normal":
-            return "Normal", 0.98, 0.05
+        # Pre-classified by Member 2's HIDS model: keep its label and its scores
+        ml_label = ML_LABELS.get(str(preset_label).strip().lower())
+        if ml_label:
+            is_normal = ml_label == "Normal"
+            confidence = self._unit_interval(ml_confidence, 0.98 if is_normal else 0.95)
+            anomaly_score = self._unit_interval(ml_anomaly_score, 0.05 if is_normal else 0.88)
+            return ml_label, confidence, anomaly_score
 
         # Heuristic Correlation:
         is_sensitive_file = any(target.lower() in file_event.file_path.lower() for target in SENSITIVE_TARGETS)
@@ -237,6 +248,13 @@ class HostSOARAgent(BaseAgent):
 
         # Normal application behavior
         return "Normal", 0.96, 0.05
+
+    @staticmethod
+    def _unit_interval(value: Any, default: float) -> float:
+        try:
+            return min(1.0, max(0.0, float(value)))
+        except (TypeError, ValueError):
+            return default
 
     def _calculate_host_risk(
         self,
@@ -310,37 +328,61 @@ class HostSOARAgent(BaseAgent):
             remediation = f"Simulated process kill for malicious PID {process.pid}. File '{file_event.file_path}' preserved."
             logger.warning("[DRY RUN] Host SOAR Action: Kill PID %d (%s)", process.pid, process.process_name)
             return HostActionType.TERMINATE_PROCESS, status, remediation
-        else:
-            kill_success = self._terminate_pid(process.pid)
-            if kill_success:
-                status = f"SUCCESS (Terminated malicious process PID {process.pid} [{process.process_name}])"
-                remediation = f"Process {process.process_name} (PID: {process.pid}) was terminated immediately. Host contained."
-                logger.critical("🚨 [HOST SOAR] Terminated malicious PID %d (%s)", process.pid, process.process_name)
-            else:
-                status = f"FAILED (Could not terminate PID {process.pid})"
-                remediation = f"Failed to terminate PID {process.pid}. Operator manual intervention required."
-            return HostActionType.TERMINATE_PROCESS, status, remediation
 
-    def _terminate_pid(self, pid: int) -> bool:
-        """Safely terminate a process by PID using psutil / os.kill."""
+        outcome, detail = self._terminate_pid(process)
+        label = f"PID {process.pid} [{process.process_name}]"
+        if outcome == "SUCCESS":
+            status = f"SUCCESS (Terminated malicious process {label})"
+            remediation = f"Process {process.process_name} (PID: {process.pid}) was terminated immediately. Host contained."
+            logger.critical("🚨 [HOST SOAR] Terminated malicious PID %d (%s)", process.pid, process.process_name)
+        elif outcome == "ALREADY_EXITED":
+            status = f"ALREADY_EXITED ({label} was no longer running)"
+            remediation = f"{process.process_name} exited before containment. Inspect '{process.exe_path or 'its executable'}' and rotate exposed credentials."
+        elif outcome == "IDENTITY_MISMATCH":
+            status = f"SKIPPED (PID {process.pid} now belongs to a different process: {detail})"
+            remediation = "Termination refused to avoid killing an unrelated process (PID reuse). Operator review required."
+            logger.warning("Host SOAR refused to kill PID %d: %s", process.pid, detail)
+        else:
+            status = f"FAILED (Could not terminate {label}: {detail})"
+            remediation = f"Failed to terminate PID {process.pid}. Operator manual intervention required."
+        return HostActionType.TERMINATE_PROCESS, status, remediation
+
+    def _terminate_pid(self, process: HostProcessInfo) -> tuple[str, str]:
+        """
+        Terminate the process only if the live PID still matches the reported process.
+        Returns (outcome, detail) where outcome is SUCCESS, ALREADY_EXITED, IDENTITY_MISMATCH or FAILED.
+        """
         if psutil is None:
-            try:
-                os.kill(pid, 9)
-                return True
-            except Exception as e:
-                logger.error("Failed to kill PID %d via os.kill: %s", pid, e)
-                return False
+            return "FAILED", "psutil unavailable, cannot verify process identity"
 
         try:
-            p = psutil.Process(pid)
-            p.terminate()
-            gone, alive = psutil.wait_procs([p], timeout=2.0)
-            if p in alive:
-                p.kill()
-            return True
+            p = psutil.Process(process.pid)
+            actual_name = p.name().lower()
+            try:
+                actual_exe = p.exe()
+            except (psutil.AccessDenied, psutil.ZombieProcess):
+                actual_exe = ""
         except psutil.NoSuchProcess:
-            logger.info("PID %d already terminated.", pid)
-            return True
+            return "ALREADY_EXITED", ""
+        except psutil.AccessDenied as e:
+            return "FAILED", f"access denied ({e})"
+
+        if actual_name != process.process_name:
+            return "IDENTITY_MISMATCH", f"expected {process.process_name}, found {actual_name}"
+        if process.exe_path:
+            if not actual_exe:
+                return "IDENTITY_MISMATCH", "executable path of live process could not be verified"
+            if os.path.normcase(os.path.abspath(actual_exe)) != os.path.normcase(os.path.abspath(process.exe_path)):
+                return "IDENTITY_MISMATCH", f"expected {process.exe_path}, found {actual_exe}"
+
+        try:
+            p.terminate()
+            _, alive = psutil.wait_procs([p], timeout=2.0)
+            if alive:
+                p.kill()
+            return "SUCCESS", ""
+        except psutil.NoSuchProcess:
+            return "ALREADY_EXITED", ""
         except Exception as e:
-            logger.error("Failed to terminate PID %d: %s", pid, e)
-            return False
+            logger.error("Failed to terminate PID %d: %s", process.pid, e)
+            return "FAILED", str(e)

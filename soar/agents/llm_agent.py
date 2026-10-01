@@ -12,7 +12,7 @@ import httpx
 from typing import Dict, Any, Optional, List
 
 from agents.base_agent import BaseAgent
-from core.schemas import Incident, LLMExplanation
+from core.schemas import Incident, HostIncident, LLMExplanation
 from core.event_bus import EventBus, Event
 
 logger = logging.getLogger("SentinelAI.LLMAgent")
@@ -64,10 +64,25 @@ class LLMExplanationAgent(BaseAgent):
         """
         Generate SOC narrative using Gemini, Ollama, or Expert System.
         """
+        exp = self._try_genai(self._build_prompt(incident))
+        if exp:
+            return exp
+
+        # 3. Deterministic Expert Security System Fallback
+        return self._generate_expert_briefing(incident)
+
+    def generate_host_briefing(self, incident: HostIncident) -> LLMExplanation:
+        """Generate SOC narrative for a HIDS host incident using Gemini, Ollama, or Expert System."""
+        exp = self._try_genai(self._build_host_prompt(incident))
+        if exp:
+            return exp
+        return self._generate_host_expert_briefing(incident)
+
+    def _try_genai(self, prompt: str) -> Optional[LLMExplanation]:
         # 1. Try Gemini API
         if self.gemini_api_key:
             try:
-                exp = self._call_gemini_api(incident)
+                exp = self._call_gemini_api(prompt)
                 if exp:
                     return exp
             except Exception as exc:
@@ -75,20 +90,14 @@ class LLMExplanationAgent(BaseAgent):
 
         # 2. Try Ollama Local LLM
         try:
-            exp = self._call_ollama(incident)
-            if exp:
-                return exp
+            return self._call_ollama(prompt)
         except Exception:
-            pass
+            return None
 
-        # 3. Deterministic Expert Security System Fallback
-        return self._generate_expert_briefing(incident)
-
-    def _call_gemini_api(self, incident: Incident) -> Optional[LLMExplanation]:
+    def _call_gemini_api(self, prompt: str) -> Optional[LLMExplanation]:
         """Call Google Gemini REST endpoint."""
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
-        prompt = self._build_prompt(incident)
-        
+
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"}
@@ -109,10 +118,10 @@ class LLMExplanationAgent(BaseAgent):
                 )
         return None
 
-    def _call_ollama(self, incident: Incident) -> Optional[LLMExplanation]:
+    def _call_ollama(self, prompt: str) -> Optional[LLMExplanation]:
         """Call local Ollama instance if active."""
         url = f"{self.ollama_endpoint}/api/generate"
-        prompt = self._build_prompt(incident) + "\nOutput valid JSON only with keys: summary, technical_analysis, mitre_context, soc_recommendations."
+        prompt = prompt + "\nOutput valid JSON only with keys: summary, technical_analysis, mitre_context, soc_recommendations."
         
         payload = {
             "model": self.ollama_model,
@@ -234,6 +243,68 @@ class LLMExplanationAgent(BaseAgent):
             soc_recommendations=recs,
             provider="EXPERT_SYSTEM"
         )
+
+    def _generate_host_expert_briefing(self, incident: HostIncident) -> LLMExplanation:
+        """Plain-language host incident narrative without external network calls."""
+        proc = incident.process
+        fe = incident.file_event
+        action = incident.soar_action.value
+
+        summary = (
+            f"The program {proc.process_name} (PID {proc.pid}) accessed {fe.file_type} "
+            f"belonging to {fe.target_browser}. SentinelAI classified this as {incident.classification} "
+            f"activity with risk {incident.risk_score}/10 and responded with '{action}' ({incident.action_status})."
+        )
+        technical = (
+            f"{fe.event_type} access to '{fe.file_path}' by '{proc.exe_path or proc.process_name}' "
+            f"launched from parent '{proc.parent_name or 'unknown'}'. "
+            f"Confidence {incident.confidence * 100:.1f}%, anomaly score {incident.anomaly_score:.2f}."
+        )
+        if incident.mitre_technique_id:
+            mitre_ctx = (
+                f"Mapped to MITRE ATT&CK {incident.mitre_technique_id} ({incident.mitre_technique_name}) "
+                f"under the {incident.mitre_tactic} tactic."
+            )
+        else:
+            mitre_ctx = "No MITRE ATT&CK technique mapped for this host event."
+
+        if incident.classification == "Stealer":
+            recs = [
+                f"Sign out of all {fe.target_browser} sessions and change saved passwords from a clean device.",
+                f"Confirm {proc.process_name} (PID {proc.pid}) is no longer running and scan '{proc.exe_path or proc.process_name}' with Defender.",
+                f"Check outbound network connections made by PID {proc.pid} at the time of this incident for data exfiltration.",
+            ]
+        elif incident.classification in ("Ransomware", "Malware"):
+            recs = [
+                "Disconnect the host from the network until the process is contained.",
+                f"Quarantine '{proc.exe_path or proc.process_name}' and run a full offline scan.",
+                "Verify backups are intact before restoring any affected files.",
+            ]
+        else:
+            recs = ["No action required. Event retained in the host audit trail."]
+
+        return LLMExplanation(
+            summary=summary,
+            technical_analysis=technical,
+            mitre_context=mitre_ctx,
+            soc_recommendations=recs,
+            provider="EXPERT_SYSTEM"
+        )
+
+    def _build_host_prompt(self, incident: HostIncident) -> str:
+        """Construct prompt for external GenAI models from a HIDS host incident."""
+        proc = incident.process
+        fe = incident.file_event
+        return f"""You are a Tier 3 Senior SOC Analyst explaining a host security event to a non-expert Windows user. Return a JSON object with keys "summary", "technical_analysis", "mitre_context", "soc_recommendations" (list of strings).
+
+Telemetry:
+- Classification: {incident.classification} (Confidence: {incident.confidence*100:.1f}%, Anomaly: {incident.anomaly_score:.2f})
+- Risk Score: {incident.risk_score}/10 ({incident.severity.value})
+- Process: {proc.process_name} (PID {proc.pid}), Path: {proc.exe_path or 'unknown'}, Parent: {proc.parent_name or 'unknown'}
+- File Accessed: {fe.file_path} ({fe.file_type}, {fe.event_type}, Browser: {fe.target_browser})
+- MITRE Technique: {incident.mitre_technique_id} - {incident.mitre_technique_name} ({incident.mitre_tactic})
+- Action Enforced: {incident.soar_action.value} ({incident.action_status})
+"""
 
     def _build_prompt(self, incident: Incident) -> str:
         """Construct prompt for external GenAI models."""

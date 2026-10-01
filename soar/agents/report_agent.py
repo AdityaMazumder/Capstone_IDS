@@ -219,6 +219,7 @@ class ReportAgent(BaseAgent):
         summary = self.db_manager.get_dashboard_summary()
         top_offenders = self.db_manager.get_top_offending_ips(limit=5)
         recent_incidents = self.db_manager.get_recent_incidents(limit=10)
+        recent_host_incidents = self.db_manager.get_recent_host_incidents(limit=8)
 
         try:
             from reportlab.lib.pagesizes import letter
@@ -316,6 +317,32 @@ class ReportAgent(BaseAgent):
                 ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
             ]))
             elements.append(t_inc)
+            elements.append(Spacer(1, 15))
+
+            # Host (HIDS) Incidents Table
+            elements.append(Paragraph("3. Host (HIDS) Incident Chronicle", section_style))
+            host_rows = [["Timestamp", "Process (PID)", "Classification", "Risk", "Host Action"]]
+            for h in recent_host_incidents:
+                ts = datetime.fromtimestamp(h.get("timestamp", 0)).strftime("%H:%M:%S")
+                host_rows.append([
+                    ts,
+                    f"{h.get('process_name', '')} ({h.get('pid', '')})",
+                    h.get("classification", ""),
+                    f"{h.get('risk_score', 0.0)} ({h.get('severity', '')})",
+                    h.get("soar_action", "")
+                ])
+            if len(host_rows) == 1:
+                host_rows.append(["No host incidents", "-", "-", "-", "-"])
+
+            t_host = Table(host_rows, colWidths=[90, 130, 100, 100, 120])
+            t_host.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#334155")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+            ]))
+            elements.append(t_host)
 
             doc.build(elements)
             logger.info("Generated SOC Summary PDF report at: %s", pdf_path)
@@ -323,7 +350,7 @@ class ReportAgent(BaseAgent):
 
         except Exception as exc:
             logger.error("SOC Summary PDF generation failed: %s", exc)
-            return self._generate_markdown_summary_report(summary, pdf_path.replace(".pdf", ".md"))
+            return self._generate_markdown_summary_report(summary, pdf_path.replace(".pdf", ".md"), recent_host_incidents)
 
     def _generate_markdown_incident_report(self, incident: Incident, output_path: str) -> str:
         """Markdown fallback report generator."""
@@ -355,8 +382,18 @@ class ReportAgent(BaseAgent):
             f.write(content)
         return output_path
 
-    def _generate_markdown_summary_report(self, summary: Dict[str, Any], output_path: str) -> str:
+    def _generate_markdown_summary_report(
+        self,
+        summary: Dict[str, Any],
+        output_path: str,
+        host_incidents: Optional[List[Dict[str, Any]]] = None,
+    ) -> str:
         """Markdown fallback summary generator."""
+        host_lines = "\n".join(
+            f"- {h.get('process_name', '')} (PID {h.get('pid', '')}): {h.get('classification', '')}, "
+            f"risk {h.get('risk_score', 0.0)}, action {h.get('soar_action', '')}"
+            for h in (host_incidents or [])
+        ) or "- No host incidents"
         content = f"""# SentinelAI SOC Daily Summary Report
 **Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
 
@@ -365,6 +402,9 @@ class ReportAgent(BaseAgent):
 - **Total Threats Detected:** {summary.get('total_threats_detected', 0)}
 - **Active Firewall Blocks:** {summary.get('active_firewall_blocks', 0)}
 - **Average Threat Risk:** {summary.get('average_threat_risk', 0.0)}/10.0
+
+## Host (HIDS) Incidents
+{host_lines}
 """
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(content)

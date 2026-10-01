@@ -46,6 +46,7 @@ class SentinelOrchestrator:
         policy_path: Optional[str] = None,
         model_path: Optional[str] = None,
         dry_run_firewall: bool = True,
+        dry_run_host_response: bool = True,
         enable_desktop_alerts: bool = True,
         enable_console_alerts: bool = True,
         gemini_api_key: Optional[str] = None
@@ -83,7 +84,7 @@ class SentinelOrchestrator:
         self.logging_agent = LoggingAgent(db_manager=self.db_manager, event_bus=self.event_bus)
         self.report_agent = ReportAgent(db_manager=self.db_manager, event_bus=self.event_bus)
         self.llm_agent = LLMExplanationAgent(gemini_api_key=gemini_api_key, event_bus=self.event_bus)
-        self.host_agent = HostSOARAgent(event_bus=self.event_bus, dry_run=dry_run_firewall)
+        self.host_agent = HostSOARAgent(event_bus=self.event_bus, dry_run=dry_run_host_response)
 
         self.agents = [
             self.packet_agent,
@@ -100,11 +101,15 @@ class SentinelOrchestrator:
         ]
 
     def initialize(self) -> None:
-        """Initialize all 11 specialist agents and bind pub/sub event subscriptions."""
+        """Initialize all specialist agents and bind pub/sub event subscriptions."""
         logger.info("Initializing SentinelAI Multi-Agent System...")
         
         for agent in self.agents:
             agent.initialize()
+
+        # HIDS sensors / Member 2's model publish here; route through the full host pipeline
+        for topic in ("host.event.ingested", "host.model.prediction"):
+            self.event_bus.subscribe(topic, self._on_host_bus_event, priority=10, agent_name="SentinelOrchestrator")
 
         # Start periodic telemetry collector thread
         self._stop_event.clear()
@@ -114,7 +119,7 @@ class SentinelOrchestrator:
             daemon=True
         )
         self._metrics_thread.start()
-        logger.info("All 11 SentinelAI Agents initialized and operational.")
+        logger.info("All %d SentinelAI Agents initialized and operational.", len(self.agents))
 
     def process_flow(self, raw_flow: Dict[str, Any]) -> Incident:
         """
@@ -169,18 +174,32 @@ class SentinelOrchestrator:
     def process_host_event(self, raw_host_event: Dict[str, Any]) -> HostIncident:
         """
         End-to-End pipeline execution for a single host event (Phase 5 HIDS).
-        Correlates process & sensitive file access, computes risk, maps MITRE ATT&CK,
-        executes autonomous process termination, and persists to database.
+        HostSOARAgent -> [AlertAgent, LLMAgent] -> SQLite (host_incidents + audit_logs)
         """
         incident = self.host_agent.process_host_event(raw_host_event)
-        
-        # Persist host incident to database
-        try:
-            self.db_manager.save_host_incident(incident)
-        except Exception as exc:
-            logger.debug("Database save_host_incident notice: %s", exc)
+        is_threat = incident.classification != "Normal"
+
+        if is_threat:
+            incident.alert = self.alert_agent.dispatch_host_alert(incident)
+            incident.llm_explanation = self.llm_agent.generate_host_briefing(incident)
+
+        self.db_manager.save_host_incident(incident)
+        if incident.soar_action.value != "LOG_ONLY":
+            self.db_manager.save_audit_log(
+                agent_name=self.host_agent.name,
+                action=f"{incident.soar_action.value} ({incident.action_status.split(' ')[0]})",
+                details=f"PID={incident.process.pid}, Process={incident.process.process_name}, "
+                        f"File={incident.file_event.file_path}, Risk={incident.risk_score}",
+                level="WARNING" if is_threat else "INFO",
+            )
 
         return incident
+
+    def _on_host_bus_event(self, event: Event) -> None:
+        if isinstance(event.data, dict):
+            self.process_host_event(event.data)
+        else:
+            logger.warning("Ignoring host bus event with non-dict payload: %s", type(event.data))
 
     def process_host_batch(self, raw_host_events: List[Dict[str, Any]]) -> List[HostIncident]:
         """Process a collection of host event dictionaries."""

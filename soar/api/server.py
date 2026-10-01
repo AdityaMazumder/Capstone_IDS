@@ -96,6 +96,7 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing SentinelAI Multi-Agent Backend Server...")
     orchestrator = SentinelOrchestrator(
         dry_run_firewall=True,
+        dry_run_host_response=True,
         enable_desktop_alerts=False
     )
     orchestrator.initialize()
@@ -153,16 +154,24 @@ class FlowIngestRequest(BaseModel):
 
 
 class HostEventIngestRequest(BaseModel):
-    """Phase 5: HIDS Host event ingestion payload."""
-    pid: int = Field(5892, description="Process ID")
-    process_name: str = Field("python.exe", description="Process executable name")
-    parent_name: str = Field("cmd.exe", description="Parent process name")
-    cpu_percent: float = Field(8.1, description="CPU usage percent")
-    memory_mb: float = Field(72.0, description="Memory in megabytes")
-    file_path: str = Field("C:\\Users\\User\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies", description="Sensitive file path")
-    file_type: Optional[str] = Field("CookieDB", description="Detected sensitive target category")
+    """Phase 5: HIDS Host event ingestion payload. Sensor fields are required; ML fields are optional."""
+    pid: int = Field(..., gt=0, description="Process ID observed by the sensor", examples=[5892])
+    process_name: str = Field(..., min_length=1, description="Process executable name", examples=["python.exe"])
+    file_path: str = Field(
+        ...,
+        min_length=1,
+        description="File the process accessed",
+        examples=["C:\\Users\\User\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies"],
+    )
+    exe_path: Optional[str] = Field(None, description="Full executable path (used to verify identity before termination)")
+    parent_name: Optional[str] = Field(None, description="Parent process name", examples=["cmd.exe"])
+    cpu_percent: float = Field(0.0, description="CPU usage percent")
+    memory_mb: float = Field(0.0, description="Memory in megabytes")
+    file_type: Optional[str] = Field(None, description="Sensitive target category (auto-detected from path if omitted)")
     event_type: str = Field("READ", description="READ, MODIFY, CREATE, DELETE")
-    label: Optional[str] = Field("Stealer", description="Pre-classified ML label (Normal/Stealer)")
+    label: Optional[str] = Field(None, description="Optional ML label from Member 2's model: Normal, Stealer, Ransomware, Malware")
+    confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Optional ML confidence for label")
+    anomaly_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Optional ML anomaly score")
 
 
 
@@ -309,7 +318,7 @@ async def ingest_host_event(host_req: HostEventIngestRequest):
     if not orchestrator:
         raise HTTPException(status_code=503, detail="Orchestrator not initialized")
 
-    host_dict = host_req.model_dump()
+    host_dict = host_req.model_dump(exclude_none=True)
     incident = orchestrator.process_host_event(host_dict)
 
     # Broadcast real-time host incident to WebSockets
@@ -327,7 +336,8 @@ async def ingest_host_event(host_req: HostEventIngestRequest):
         "soar_action": incident.soar_action.value,
         "action_status": incident.action_status,
         "mitre": f"{incident.mitre_technique_id} - {incident.mitre_technique_name}",
-        "remediation_notes": incident.remediation_notes
+        "remediation_notes": incident.remediation_notes,
+        "llm_summary": incident.llm_explanation.summary if incident.llm_explanation else None
     }
 
 

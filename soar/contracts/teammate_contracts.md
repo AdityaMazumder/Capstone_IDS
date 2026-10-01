@@ -186,20 +186,47 @@ async function handleUnblock(ruleId) {
 
 ## 4. Phase 5: HIDS Teammate Contracts (Host Intrusion Detection)
 
-### Member 1: Process Sensor (`hids/process_monitor.py`)
-Outputs running process metadata every 2 seconds:
-```python
-{
-    "pid": 5892,
-    "process_name": "python.exe",
-    "parent_name": "cmd.exe",
-    "cpu_percent": 8.1,
-    "memory_mb": 72.0,
-    "exe_path": "C:\\Python311\\python.exe"
-}
-```
+Roles: Member 1 = host sensors, Member 2 = HIDS ML, Member 3 = threat analysis / MITRE,
+Member 4 = SOAR / risk / response (`soar/agents/host_agent.py`), Member 5 = dashboard.
 
-### Member 2: File Sensor (`hids/file_monitor.py`)
+### Host event accepted by SOAR (`orchestrator.process_host_event` / `POST /api/host/events/ingest`)
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `pid` | yes | Real PID observed by the sensor |
+| `process_name` | yes | Executable basename, e.g. `python.exe` |
+| `file_path` | yes | File the process accessed |
+| `exe_path` | recommended | Full executable path. Before a live kill, SOAR checks the running PID still has this name and path, and refuses otherwise |
+| `parent_name` | optional | Left empty if unknown (no longer defaults to `explorer.exe`) |
+| `event_type` | optional | `READ` (default), `MODIFY`, `CREATE`, `DELETE` |
+| `file_type`, `cpu_percent`, `memory_mb`, `cmdline` | optional | `file_type` is auto-detected from the path if omitted |
+| `label` | optional (Member 2) | `Normal`, `Benign`, `Stealer`, `InfoStealer`, `Ransomware`, `Malware`. Kept as-is; other values fall back to SOAR heuristics |
+| `confidence`, `anomaly_score` | optional (Member 2) | 0.0–1.0, used for risk scoring when `label` is set |
+
+Sensors can also publish the same dict on the event bus topic `host.event.ingested` (or `host.model.prediction` for ML output).
+Threats (anything not `Normal`) are alerted (`AlertMessage.source == "HIDS"`), explained by the LLM agent, saved to `host_incidents`,
+and written to `audit_logs` when an action other than `LOG_ONLY` is taken.
+
+Process termination has its own switch: `SentinelOrchestrator(dry_run_host_response=True)` (default), independent of `dry_run_firewall`.
+
+### Member 1: Process Sensor (`hids/process_monitor.py`)
+Scans every 2 seconds (fixed rate) and writes lifecycle events to `hids/logs/process_events_YYYY-MM-DD.csv`
+(`python -m hids.process_monitor`). One process run = `(pid, create_time)`.
+
+| `event` | Meaning |
+|---------|---------|
+| `START` | Run first seen: identity, `exe_path`, `cmdline`, `memory_mb` |
+| `STATS` | Every 30 s per running process: `cpu_percent`, `memory_mb` |
+| `EXIT` | Run disappeared: `lifetime_s`, `samples`, `cpu_mean`, `cpu_max`, `memory_max_mb` |
+| `END` | Still running when the monitor stopped: same aggregates as `EXIT` |
+
+Columns: `timestamp` (epoch, ms), `time_iso`, `event`, `pid`, `ppid`, `create_time`, `process_name`, `parent_name`,
+`parent_alive` (0 when the parent exited or its PID was reused), `exe_path`, `cmdline`, `cpu_percent`, `memory_mb`,
+`lifetime_s`, `samples`, `cpu_mean`, `cpu_max`, `memory_max_mb`.
+CPU is a share of total machine CPU (0–100). `EXIT` + `END` rows are one row per run, the starting point for Member 2's training table.
+The monitor excludes itself. Run as Administrator to get `cmdline` / `exe_path` for system and other-user processes.
+
+### Member 1: File Sensor (`hids/file_monitor.py`)
 Monitors sensitive browser credentials (Chrome `Cookies`, `Local State`, Edge `Cookies`, Firefox `cookies.sqlite`):
 ```python
 {
@@ -209,23 +236,25 @@ Monitors sensitive browser credentials (Chrome `Cookies`, `Local State`, Edge `C
 }
 ```
 
-### Member 4: Dataset & ML Integration (Week 3 Isolation Forest)
+### Member 2: Dataset & ML Integration (Week 3 Isolation Forest)
 Send combined process + file event + ML prediction to SOAR:
 ```python
 from soar.core.orchestrator import SentinelOrchestrator
 
-orchestrator = SentinelOrchestrator(dry_run_firewall=True)
+orchestrator = SentinelOrchestrator(dry_run_firewall=True, dry_run_host_response=True)
 orchestrator.initialize()
 
 # Ingest and execute automated SOAR response (PID termination & alert)
 host_incident = orchestrator.process_host_event({
     "pid": 5892,
     "process_name": "python.exe",
+    "exe_path": "C:\\Users\\User\\Downloads\\python.exe",
     "parent_name": "cmd.exe",
     "cpu_percent": 8.1,
     "memory_mb": 72.0,
     "file_path": "C:\\Users\\User\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies",
     "label": "Stealer",
+    "confidence": 0.9,
     "anomaly_score": 0.92
 })
 print(f"SOAR Action: {host_incident.soar_action} - Status: {host_incident.action_status}")
