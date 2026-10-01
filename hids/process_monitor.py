@@ -312,8 +312,9 @@ def run(
     print("Press Ctrl+C to stop.")
     try:
         while True:
+            samples=scan()
             now = time.time()
-            out.write(tracker.update(scan(), now, read_static), now)
+            out.write(tracker.update(samples, now, read_static), now)
             scans += 1
             if duration and time.monotonic() - start >= duration:
                 break
