@@ -14,7 +14,7 @@ import psutil
 from typing import Dict, List, Any, Optional, Union
 
 from core.event_bus import EventBus, Event
-from core.schemas import Incident, FlowEvent, SystemMetrics, AgentStatus
+from core.schemas import Incident, FlowEvent, SystemMetrics, AgentStatus, HostIncident
 from database.db_manager import DatabaseManager
 from rules.policy_engine import PolicyEngine
 
@@ -28,6 +28,7 @@ from agents.alert_agent import AlertAgent
 from agents.logging_agent import LoggingAgent
 from agents.report_agent import ReportAgent
 from agents.llm_agent import LLMExplanationAgent
+from agents.host_agent import HostSOARAgent
 
 logger = logging.getLogger("SentinelAI.Orchestrator")
 
@@ -35,7 +36,7 @@ logger = logging.getLogger("SentinelAI.Orchestrator")
 class SentinelOrchestrator:
     """
     Master Multi-Agent Coordinator for SentinelAI.
-    Manages the lifecycle of all 11 agents, binds event topics, and exposes
+    Manages the lifecycle of all 12 specialist agents, binds event topics, and exposes
     clean contract interfaces for Member 1 (ML), Member 2 (Sniffer), and Member 4 (Dashboard).
     """
 
@@ -63,7 +64,7 @@ class SentinelOrchestrator:
         self._stop_event = threading.Event()
         self._metrics_thread: Optional[threading.Thread] = None
 
-        # Instantiate all 11 specialist agents
+        # Instantiate all specialist agents
         self.packet_agent = PacketAgent(event_bus=self.event_bus)
         self.detection_agent = DetectionAgent(
             model_path=model_path,
@@ -82,6 +83,7 @@ class SentinelOrchestrator:
         self.logging_agent = LoggingAgent(db_manager=self.db_manager, event_bus=self.event_bus)
         self.report_agent = ReportAgent(db_manager=self.db_manager, event_bus=self.event_bus)
         self.llm_agent = LLMExplanationAgent(gemini_api_key=gemini_api_key, event_bus=self.event_bus)
+        self.host_agent = HostSOARAgent(event_bus=self.event_bus, dry_run=dry_run_firewall)
 
         self.agents = [
             self.packet_agent,
@@ -94,6 +96,7 @@ class SentinelOrchestrator:
             self.logging_agent,
             self.report_agent,
             self.llm_agent,
+            self.host_agent,
         ]
 
     def initialize(self) -> None:
@@ -162,6 +165,26 @@ class SentinelOrchestrator:
         self.logging_agent.process(Event(topic="action.log", data=incident))
 
         return incident
+
+    def process_host_event(self, raw_host_event: Dict[str, Any]) -> HostIncident:
+        """
+        End-to-End pipeline execution for a single host event (Phase 5 HIDS).
+        Correlates process & sensitive file access, computes risk, maps MITRE ATT&CK,
+        executes autonomous process termination, and persists to database.
+        """
+        incident = self.host_agent.process_host_event(raw_host_event)
+        
+        # Persist host incident to database
+        try:
+            self.db_manager.save_host_incident(incident)
+        except Exception as exc:
+            logger.debug("Database save_host_incident notice: %s", exc)
+
+        return incident
+
+    def process_host_batch(self, raw_host_events: List[Dict[str, Any]]) -> List[HostIncident]:
+        """Process a collection of host event dictionaries."""
+        return [self.process_host_event(e) for e in raw_host_events]
 
     def process_batch(self, raw_flows: List[Dict[str, Any]]) -> List[Incident]:
         """Process a collection of network flow dictionaries."""

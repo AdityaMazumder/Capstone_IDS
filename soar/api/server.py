@@ -152,6 +152,20 @@ class FlowIngestRequest(BaseModel):
     rst_flag_count: int = Field(0, description="RST flag count")
 
 
+class HostEventIngestRequest(BaseModel):
+    """Phase 5: HIDS Host event ingestion payload."""
+    pid: int = Field(5892, description="Process ID")
+    process_name: str = Field("python.exe", description="Process executable name")
+    parent_name: str = Field("cmd.exe", description="Parent process name")
+    cpu_percent: float = Field(8.1, description="CPU usage percent")
+    memory_mb: float = Field(72.0, description="Memory in megabytes")
+    file_path: str = Field("C:\\Users\\User\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies", description="Sensitive file path")
+    file_type: Optional[str] = Field("CookieDB", description="Detected sensitive target category")
+    event_type: str = Field("READ", description="READ, MODIFY, CREATE, DELETE")
+    label: Optional[str] = Field("Stealer", description="Pre-classified ML label (Normal/Stealer)")
+
+
+
 # -------------------------------------------------------------
 # REST API Endpoints for React Frontend
 # -------------------------------------------------------------
@@ -283,6 +297,53 @@ async def ingest_flow_event(flow_req: FlowIngestRequest):
         "firewall_rule": incident.firewall_rule.to_dict() if incident.firewall_rule else None,
         "llm_summary": incident.llm_explanation.summary if incident.llm_explanation else None
     }
+
+
+@app.post("/api/host/events/ingest")
+async def ingest_host_event(host_req: HostEventIngestRequest):
+    """
+    Phase 5: Ingest host telemetry event (from monitor.py / watcher.py or ML).
+    Correlates process & sensitive file access, executes automated process kill if stealer,
+    and broadcasts to WebSockets.
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+
+    host_dict = host_req.model_dump()
+    incident = orchestrator.process_host_event(host_dict)
+
+    # Broadcast real-time host incident to WebSockets
+    await ws_manager.broadcast_json({
+        "event_type": "NEW_HOST_INCIDENT",
+        "data": incident.to_dict()
+    })
+
+    return {
+        "status": "PROCESSED",
+        "incident_id": incident.incident_id,
+        "classification": incident.classification,
+        "risk_score": incident.risk_score,
+        "severity": incident.severity.value,
+        "soar_action": incident.soar_action.value,
+        "action_status": incident.action_status,
+        "mitre": f"{incident.mitre_technique_id} - {incident.mitre_technique_name}",
+        "remediation_notes": incident.remediation_notes
+    }
+
+
+@app.get("/api/host/incidents")
+def get_host_incidents(
+    limit: int = Query(50, ge=1, le=500, description="Maximum number of host incidents to return"),
+    classification: Optional[str] = Query(None, description="Filter by classification: Stealer, Normal, Ransomware")
+):
+    """
+    Phase 5: Returns recent host incidents from SQLite database.
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+    incidents = orchestrator.db_manager.get_recent_host_incidents(limit=limit, classification=classification)
+    return {"count": len(incidents), "host_incidents": incidents}
+
 
 
 @app.post("/api/reports/generate")

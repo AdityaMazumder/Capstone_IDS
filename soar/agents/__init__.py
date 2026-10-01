@@ -14,6 +14,7 @@ from agents.alert_agent import AlertAgent
 from agents.logging_agent import LoggingAgent
 from agents.report_agent import ReportAgent
 from agents.llm_agent import LLMExplanationAgent
+from agents.host_agent import HostSOARAgent
 
 __all__ = [
     "BaseAgent",
@@ -27,4 +28,6 @@ __all__ = [
     "LoggingAgent",
     "ReportAgent",
     "LLMExplanationAgent",
+    "HostSOARAgent",
 ]
+

@@ -97,3 +97,36 @@ VALUES
     ('192.168.1.1', 'Default Gateway', strftime('%s', 'now')),
     ('8.8.8.8', 'Google Public DNS Primary', strftime('%s', 'now')),
     ('1.1.1.1', 'Cloudflare DNS Primary', strftime('%s', 'now'));
+
+-- 6. Host Incidents Table (Phase 5 HIDS)
+CREATE TABLE IF NOT EXISTS host_incidents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    incident_id TEXT UNIQUE NOT NULL,
+    timestamp REAL NOT NULL,
+    hostname TEXT DEFAULT 'WINDOWS-HOST',
+    pid INTEGER,
+    process_name TEXT NOT NULL,
+    parent_name TEXT,
+    cpu_percent REAL,
+    memory_mb REAL,
+    file_path TEXT,
+    file_type TEXT,
+    event_type TEXT,
+    classification TEXT NOT NULL,
+    confidence REAL,
+    risk_score REAL NOT NULL,
+    severity TEXT NOT NULL,
+    mitre_technique_id TEXT,
+    mitre_technique_name TEXT,
+    soar_action TEXT NOT NULL,
+    action_status TEXT,
+    remediation_notes TEXT,
+    raw_json TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_host_incidents_timestamp ON host_incidents(timestamp);
+CREATE INDEX IF NOT EXISTS idx_host_incidents_process ON host_incidents(process_name);
+CREATE INDEX IF NOT EXISTS idx_host_incidents_classification ON host_incidents(classification);
+CREATE INDEX IF NOT EXISTS idx_host_incidents_risk ON host_incidents(risk_score);
+

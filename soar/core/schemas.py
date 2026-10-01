@@ -232,3 +232,89 @@ class SystemMetrics:
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
+
+
+# =====================================================================
+# Phase 5: HIDS (Host Intrusion Detection System) Schemas
+# =====================================================================
+
+class HostActionType(str, Enum):
+    """SOAR action types for host-level mitigations."""
+    TERMINATE_PROCESS = "TERMINATE_PROCESS"
+    QUARANTINE_FILE = "QUARANTINE_FILE"
+    SUSPEND_PROCESS = "SUSPEND_PROCESS"
+    ALERT_ONLY = "ALERT_ONLY"
+    LOG_ONLY = "LOG_ONLY"
+
+
+@dataclass
+class HostProcessInfo:
+    """Process metadata collected via psutil sensor (Member 1)."""
+    pid: int = 0
+    process_name: str = ""
+    parent_name: str = ""
+    cpu_percent: float = 0.0
+    memory_mb: float = 0.0
+    exe_path: str = ""
+    cmdline: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class HostFileEvent:
+    """Sensitive file access metadata collected via watchdog sensor (Member 2)."""
+    file_path: str = ""
+    file_type: str = ""  # CookieDB, LocalState, CryptoWallet, SavedPasswords
+    event_type: str = "READ"  # READ, MODIFY, CREATE, DELETE
+    target_browser: str = ""  # Google Chrome, Microsoft Edge, Mozilla Firefox
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class HostIncident:
+    """Standardized Host Incident format produced by Member 5 (HIDS SOAR)."""
+    incident_id: str = field(default_factory=lambda: f"HOST-INC-{uuid.uuid4().hex[:8].upper()}")
+    timestamp: float = field(default_factory=time.time)
+    source: str = "HIDS"
+    hostname: str = "WINDOWS-HOST"
+    process: HostProcessInfo = field(default_factory=HostProcessInfo)
+    file_event: HostFileEvent = field(default_factory=HostFileEvent)
+    classification: str = "Normal"  # Normal, Stealer, Ransomware
+    confidence: float = 1.0
+    anomaly_score: float = 0.0
+    risk_score: float = 0.0
+    severity: SeverityLevel = SeverityLevel.LOW
+    mitre_technique_id: str = ""
+    mitre_technique_name: str = ""
+    mitre_tactic: str = ""
+    soar_action: HostActionType = HostActionType.LOG_ONLY
+    action_status: str = "PENDING"  # SUCCESS, SIMULATED, FAILED, PENDING
+    remediation_notes: str = ""
+    raw_event: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "incident_id": self.incident_id,
+            "timestamp": self.timestamp,
+            "source": self.source,
+            "hostname": self.hostname,
+            "process": self.process.to_dict(),
+            "file_event": self.file_event.to_dict(),
+            "classification": self.classification,
+            "confidence": round(self.confidence, 4),
+            "anomaly_score": round(self.anomaly_score, 4),
+            "risk_score": round(self.risk_score, 2),
+            "severity": self.severity.value,
+            "mitre_technique_id": self.mitre_technique_id,
+            "mitre_technique_name": self.mitre_technique_name,
+            "mitre_tactic": self.mitre_tactic,
+            "soar_action": self.soar_action.value,
+            "action_status": self.action_status,
+            "remediation_notes": self.remediation_notes,
+            "raw_event": self.raw_event
+        }
+
