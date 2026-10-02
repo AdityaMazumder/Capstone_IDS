@@ -1,0 +1,420 @@
+timestamp,process_name,parent_name,cpu_percent,memory_mb,file_type,event_type,label
+1790946187.785,python.exe,powershell.exe,,20.9,,START,Stealer
+1790946203.785,python.exe,powershell.exe,0.0,21.1,,STATS,Stealer
+1790946233.809,python.exe,powershell.exe,0.1,23.3,,STATS,Stealer
+1790946265.772,python.exe,powershell.exe,0.1,23.3,,STATS,Stealer
+1790946297.772,python.exe,powershell.exe,0.0,23.6,,STATS,Stealer
+1790946327.773,python.exe,powershell.exe,0.0,23.4,,STATS,Stealer
+1790946359.772,python.exe,powershell.exe,0.0,23.6,,STATS,Stealer
+1790946389.772,python.exe,powershell.exe,0.0,23.3,,STATS,Stealer
+1790946419.775,python.exe,powershell.exe,0.0,23.6,,STATS,Stealer
+1790946451.772,python.exe,powershell.exe,0.1,23.6,,STATS,Stealer
+1790946481.772,python.exe,powershell.exe,0.0,23.6,,STATS,Stealer
+1790946511.773,python.exe,powershell.exe,0.0,23.7,,STATS,Stealer
+1790946543.774,python.exe,powershell.exe,0.0,23.8,,STATS,Stealer
+1790946573.777,python.exe,powershell.exe,0.0,23.8,,STATS,Stealer
+1790946605.772,python.exe,powershell.exe,0.1,23.8,,STATS,Stealer
+1790946635.777,python.exe,powershell.exe,0.0,23.8,,STATS,Stealer
+1790946667.773,python.exe,powershell.exe,0.0,23.8,,STATS,Stealer
+1790946699.773,python.exe,powershell.exe,0.0,23.8,,STATS,Stealer
+1790946731.772,python.exe,powershell.exe,0.2,23.8,,STATS,Stealer
+1790946761.782,python.exe,powershell.exe,0.1,23.8,,STATS,Stealer
+1790946793.774,python.exe,powershell.exe,0.0,23.8,,STATS,Stealer
+1790946825.775,python.exe,powershell.exe,0.0,23.8,,STATS,Stealer
+1790946857.774,python.exe,powershell.exe,0.2,23.8,,STATS,Stealer
+1790946887.78,python.exe,powershell.exe,0.0,23.8,,STATS,Stealer
+1790946917.78,python.exe,powershell.exe,0.39,23.8,,STATS,Stealer
+1790946949.78,python.exe,powershell.exe,0.0,23.8,,STATS,Stealer
+1790946981.773,python.exe,powershell.exe,0.0,23.8,,STATS,Stealer
+1790947013.782,python.exe,powershell.exe,0.1,23.8,,STATS,Stealer
+1790947045.772,python.exe,powershell.exe,0.1,23.8,,STATS,Stealer
+1790947077.772,python.exe,powershell.exe,0.1,23.8,,STATS,Stealer
+1790947107.774,python.exe,powershell.exe,0.2,23.8,,STATS,Stealer
+1790947137.804,python.exe,powershell.exe,0.0,23.8,,STATS,Stealer
+1790947169.774,python.exe,powershell.exe,0.1,23.8,,STATS,Stealer
+1790947199.785,python.exe,powershell.exe,0.0,24.0,,STATS,Stealer
+1790947231.774,python.exe,powershell.exe,0.0,23.9,,STATS,Stealer
+1790947243.774,python.exe,powershell.exe,,,,EXIT,Stealer
+1790948278.464,python.exe,powershell.exe,,21.1,,START,Stealer
+1790948278.464,python.exe,powershell.exe,,21.1,,STATS,Stealer
+1790948310.457,python.exe,powershell.exe,0.0,23.5,,STATS,Stealer
+1790948342.46,python.exe,powershell.exe,0.0,23.5,,STATS,Stealer
+1790948374.454,python.exe,powershell.exe,0.2,23.5,,STATS,Stealer
+1790948406.454,python.exe,powershell.exe,0.0,23.6,,STATS,Stealer
+1790948438.454,python.exe,powershell.exe,0.0,23.6,,STATS,Stealer
+1790948468.463,python.exe,powershell.exe,0.1,23.6,,STATS,Stealer
+1790948500.454,python.exe,powershell.exe,0.0,23.6,,STATS,Stealer
+1790948532.454,python.exe,powershell.exe,0.0,23.6,,STATS,Stealer
+1790948564.454,python.exe,powershell.exe,0.0,23.6,,STATS,Stealer
+1790948596.454,python.exe,powershell.exe,0.0,23.7,,STATS,Stealer
+1790948626.454,python.exe,powershell.exe,0.0,23.4,,STATS,Stealer
+1790948656.454,python.exe,powershell.exe,0.0,23.6,,STATS,Stealer
+1790948686.454,python.exe,powershell.exe,0.0,23.4,,STATS,Stealer
+1790948716.459,python.exe,powershell.exe,0.0,23.6,,STATS,Stealer
+1790948724.463,python.exe,powershell.exe,,12.2,,START,Stealer
+1790948748.456,python.exe,powershell.exe,0.0,23.6,,STATS,Stealer
+1790948748.456,python.exe,powershell.exe,0.0,12.2,,STATS,Stealer
+1790948780.455,python.exe,powershell.exe,0.29,23.6,,STATS,Stealer
+1790948780.455,python.exe,powershell.exe,0.0,12.2,,STATS,Stealer
+1790948810.463,python.exe,powershell.exe,0.0,23.6,,STATS,Stealer
+1790948810.463,python.exe,powershell.exe,0.0,12.2,,STATS,Stealer
+1790948842.455,python.exe,powershell.exe,0.0,23.7,,STATS,Stealer
+1790948842.455,python.exe,powershell.exe,0.1,12.2,,STATS,Stealer
+1790948872.455,python.exe,powershell.exe,0.0,23.7,,STATS,Stealer
+1790948872.455,python.exe,powershell.exe,0.0,12.2,,STATS,Stealer
+1790948904.455,python.exe,powershell.exe,0.1,23.7,,STATS,Stealer
+1790948904.455,python.exe,powershell.exe,0.0,12.2,,STATS,Stealer
+1790948936.455,python.exe,powershell.exe,0.1,23.8,,STATS,Stealer
+1790948936.455,python.exe,powershell.exe,0.0,12.2,,STATS,Stealer
+1790948966.455,python.exe,powershell.exe,0.29,23.7,,STATS,Stealer
+1790948966.455,python.exe,powershell.exe,0.0,12.2,,STATS,Stealer
+1790948996.455,python.exe,powershell.exe,0.2,23.7,,STATS,Stealer
+1790948996.455,python.exe,powershell.exe,0.0,12.2,,STATS,Stealer
+1790949028.455,python.exe,powershell.exe,0.0,23.7,,STATS,Stealer
+1790949028.455,python.exe,powershell.exe,0.0,12.3,,STATS,Stealer
+1790949058.456,python.exe,powershell.exe,0.0,23.7,,STATS,Stealer
+1790949058.456,python.exe,powershell.exe,0.0,12.3,,STATS,Stealer
+1790949090.456,python.exe,powershell.exe,0.0,23.2,,STATS,Stealer
+1790949090.456,python.exe,powershell.exe,0.0,11.9,,STATS,Stealer
+1790949122.455,python.exe,powershell.exe,0.0,23.2,,STATS,Stealer
+1790949122.455,python.exe,powershell.exe,0.0,11.9,,STATS,Stealer
+1790949154.455,python.exe,powershell.exe,0.0,23.3,,STATS,Stealer
+1790949154.455,python.exe,powershell.exe,0.0,11.9,,STATS,Stealer
+1790949184.455,python.exe,powershell.exe,0.0,23.3,,STATS,Stealer
+1790949184.455,python.exe,powershell.exe,0.0,11.9,,STATS,Stealer
+1790949214.455,python.exe,powershell.exe,0.0,23.3,,STATS,Stealer
+1790949214.455,python.exe,powershell.exe,0.0,11.9,,STATS,Stealer
+1790949244.456,python.exe,powershell.exe,0.0,23.4,,STATS,Stealer
+1790949244.456,python.exe,powershell.exe,0.0,11.9,,STATS,Stealer
+1790949264.453,python.exe,powershell.exe,,,,EXIT,Stealer
+1790949276.453,python.exe,powershell.exe,0.0,23.4,,STATS,Stealer
+1790949306.461,python.exe,powershell.exe,0.0,23.4,,STATS,Stealer
+1790949338.459,python.exe,powershell.exe,,11.6,,START,Stealer
+1790949338.459,python.exe,powershell.exe,0.0,23.4,,STATS,Stealer
+1790949338.459,python.exe,powershell.exe,,11.6,,STATS,Stealer
+1790949370.452,python.exe,powershell.exe,0.0,23.4,,STATS,Stealer
+1790949370.452,python.exe,powershell.exe,0.0,11.7,,STATS,Stealer
+1790949402.458,python.exe,powershell.exe,0.1,23.4,,STATS,Stealer
+1790949402.458,python.exe,powershell.exe,0.0,11.7,,STATS,Stealer
+1790949434.452,python.exe,powershell.exe,0.29,23.4,,STATS,Stealer
+1790949434.452,python.exe,powershell.exe,0.0,11.7,,STATS,Stealer
+1790949466.452,python.exe,powershell.exe,0.0,23.4,,STATS,Stealer
+1790949466.452,python.exe,powershell.exe,0.0,11.7,,STATS,Stealer
+1790949498.451,python.exe,powershell.exe,0.0,23.5,,STATS,Stealer
+1790949498.451,python.exe,powershell.exe,0.0,11.7,,STATS,Stealer
+1790949530.451,python.exe,powershell.exe,0.0,23.5,,STATS,Stealer
+1790949530.451,python.exe,powershell.exe,0.0,11.7,,STATS,Stealer
+1790949560.452,python.exe,powershell.exe,0.1,23.5,,STATS,Stealer
+1790949560.452,python.exe,powershell.exe,0.0,11.7,,STATS,Stealer
+1790949576.453,python.exe,powershell.exe,,,,EXIT,Stealer
+1790949590.46,python.exe,powershell.exe,0.0,23.5,,STATS,Stealer
+1790949622.452,python.exe,powershell.exe,0.0,23.5,,STATS,Stealer
+1790949648.452,python.exe,powershell.exe,,,,EXIT,Stealer
+1790948725.628,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948728.074,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948730.541,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948732.973,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948735.406,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948737.856,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948740.318,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948742.78,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948745.234,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948747.692,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948750.158,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948752.624,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948755.035,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948757.449,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948759.901,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948762.344,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948764.792,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948767.24,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948769.705,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948772.145,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948774.605,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948777.063,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948779.517,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948781.978,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948784.441,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948786.888,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948789.34,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948791.786,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948794.221,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948796.68,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948799.124,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948801.59,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948804.028,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948806.493,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948808.947,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948811.421,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948813.898,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948816.347,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948818.801,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948821.235,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948823.703,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948826.123,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948828.59,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948831.027,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948833.492,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948835.93,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948838.396,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948840.833,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948843.27,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948845.75,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948848.188,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948850.646,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948853.092,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948855.558,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948857.995,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948860.46,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948862.898,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948865.348,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948867.817,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948870.271,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948872.719,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948875.18,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948877.637,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948880.075,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948882.526,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948884.972,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948887.444,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948889.898,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948892.349,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948894.821,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948897.266,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948899.719,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948902.156,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948907.073,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948909.54,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948911.994,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948914.445,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948916.883,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948919.331,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948921.8,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948924.251,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948926.719,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948929.172,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948931.656,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948934.107,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948936.574,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948939.027,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948941.476,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948943.93,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948946.395,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948948.832,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948951.268,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948953.735,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948956.17,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948958.637,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948961.08,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948963.54,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948966.023,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948968.474,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948970.921,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948973.371,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948975.817,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948978.258,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948980.719,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948983.178,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948985.642,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948988.082,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948990.532,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948993.001,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948995.475,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790948997.922,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949000.369,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949002.816,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949005.257,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949007.718,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949010.176,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949012.626,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949015.081,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949017.531,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949020.001,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949022.464,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949027.37,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949029.816,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949032.256,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949034.718,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949037.172,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949039.626,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949042.081,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949044.53,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949046.985,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949049.45,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949051.879,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949056.816,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949059.258,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949061.718,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949064.145,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949066.61,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949069.065,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949071.529,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949074.001,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949076.46,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949078.904,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949081.353,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949086.258,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949088.718,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949091.177,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949093.628,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949096.081,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949098.53,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949101.001,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949103.45,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949105.904,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949108.352,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949110.801,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949113.242,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949115.687,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949118.113,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949120.563,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949123.017,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949125.482,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949127.92,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949130.369,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949132.815,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949135.26,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949137.718,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949140.177,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949142.627,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949145.09,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949147.546,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949150.016,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949152.465,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949154.904,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949157.355,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949159.8,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949162.242,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949164.702,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949167.129,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949169.593,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949172.016,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949174.481,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949176.92,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949179.369,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949181.815,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949184.257,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949186.718,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949189.144,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949191.617,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949194.064,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949196.528,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949198.984,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949201.45,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949203.904,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949206.352,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949208.815,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949211.258,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949213.718,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949216.176,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949218.642,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949221.098,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949223.546,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949226.016,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949228.483,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949230.92,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949233.37,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949235.816,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949238.256,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949240.718,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949243.144,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949245.611,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949248.065,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949250.53,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949252.971,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949255.409,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949257.86,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949260.306,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949339.459,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949341.903,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949344.354,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949346.815,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949349.259,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949351.708,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949356.623,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949359.088,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949361.546,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949364.003,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949366.459,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949368.905,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949371.378,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949373.833,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949376.287,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949378.737,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949381.19,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949383.639,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949386.114,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949388.572,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949391.039,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949393.494,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949395.942,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949398.393,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949400.853,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949403.317,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949405.77,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949408.231,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949410.696,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949413.178,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949415.651,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949418.121,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949420.572,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949423.038,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949425.513,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949427.978,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949430.415,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949432.872,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949435.317,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949437.774,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949440.225,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949442.676,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949445.147,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949447.602,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949450.067,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949452.536,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949455.011,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949457.469,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949459.914,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949462.362,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949464.81,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949467.23,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949469.71,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949472.159,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949477.083,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949479.537,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949482.001,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949484.484,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949486.954,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949489.406,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949491.854,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949494.299,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949496.744,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949499.212,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949501.666,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949506.595,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949509.06,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949511.512,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949513.98,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949516.424,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949518.843,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949521.295,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949523.748,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949526.186,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949528.637,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949531.1,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949533.552,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949536.021,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949538.483,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949540.945,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949543.401,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949545.859,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949548.331,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949550.775,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949553.229,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949555.679,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949558.147,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949560.601,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949563.048,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949565.531,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949567.971,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949570.391,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
+1790949572.838,python.exe,powershell.exe,,,LocalState (Master Key),READ,Stealer
