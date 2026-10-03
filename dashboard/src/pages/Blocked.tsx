@@ -1,14 +1,14 @@
-﻿import React, { useContext, useState } from 'react';
+﻿import { useContext, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ShieldAlert, Shield, ShieldOff, Clock, TestTube, AlertTriangle } from 'lucide-react';
+import { Shield, Clock } from 'lucide-react';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
 import { ExpertContext } from '../App';
 import { Skeleton, ErrorState, ConfirmModal } from '../components/index';
 import { getBlocks, unblockIP } from '../api/endpoints';
+import type { BlocksResponse } from '../api/endpoints';
 import { translateThreat } from '../lib/translate';
-import {} from '../components/index';
 import { toast } from 'sonner';
 
 dayjs.extend(relativeTime);
@@ -18,7 +18,7 @@ export default function Blocked() {
   const queryClient = useQueryClient();
   const [selectedIp, setSelectedIp] = useState<string | null>(null);
 
-  const { data: blocks = [], isLoading, error } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['blocks'],
     queryFn: getBlocks,
     refetchInterval: 15000,
@@ -26,15 +26,18 @@ export default function Blocked() {
 
   const unblockMutation = useMutation({
     mutationFn: unblockIP,
-    onMutate: async (ip) => {
+    onMutate: async (ruleId: string) => {
       await queryClient.cancelQueries({ queryKey: ['blocks'] });
-      const previousBlocks = queryClient.getQueryData(['blocks']);
-      queryClient.setQueryData(['blocks'], (old: any) =>
-        old?.map((b: any) => b.ip_address === ip ? { ...b, status: 'RELEASED' } : b)
+      const previousBlocks = queryClient.getQueryData<BlocksResponse>(['blocks']);
+      queryClient.setQueryData<BlocksResponse>(['blocks'], (old) =>
+        old && {
+          ...old,
+          blocked_ips: old.blocked_ips.map((b) => b.rule_id === ruleId ? { ...b, status: 'RELEASED' } : b),
+        }
       );
       return { previousBlocks };
     },
-    onError: (err, ip, context) => {
+    onError: (_err, _ruleId, context) => {
       queryClient.setQueryData(['blocks'], context?.previousBlocks);
       toast.error('Failed to unblock address');
     },
@@ -47,13 +50,15 @@ export default function Blocked() {
   if (isLoading) return <div className="p-6"><Skeleton className="h-64 w-full" /></div>;
   if (error) return <div className="p-6"><ErrorState message="Could not load blocked addresses." /></div>;
 
+  const blocks = data?.blocked_ips ?? [];
+
   const handleUnblock = (ip: string) => {
     setSelectedIp(ip);
   };
 
   const confirmUnblock = () => {
-    if (selectedIp) {
-      unblockMutation.mutate(selectedIp);
+    if (selectedBlock) {
+      unblockMutation.mutate(selectedBlock.rule_id);
       setSelectedIp(null);
     }
   };
@@ -67,8 +72,8 @@ export default function Blocked() {
     return 'Outside computer';
   };
 
-  const selectedBlock = blocks.find((b: any) => b.ip_address === selectedIp);
-  const selectedReason = selectedBlock ? translateThreat(selectedBlock.reason || 'Unknown').friendly : '';
+  const selectedBlock = blocks.find((b) => b.ip_address === selectedIp);
+  const selectedReason = selectedBlock ? translateThreat(selectedBlock.reason || 'Unknown').friendlyName.toLowerCase() : '';
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
@@ -87,10 +92,10 @@ export default function Blocked() {
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {blocks.map((block: any) => {
+          {blocks.map((block) => {
             const threatInfo = translateThreat(block.reason || 'Unknown');
-            const timeSince = dayjs(block.block_timestamp).fromNow();
-            const expiry = block.expiry_timestamp ? dayjs(block.expiry_timestamp) : null;
+            const timeSince = dayjs.unix(block.block_timestamp).fromNow();
+            const expiry = block.expiry_timestamp ? dayjs.unix(block.expiry_timestamp) : null;
             const isPermanent = !expiry;
             let timerText = "Permanent";
             if (!isPermanent && expiry) {
@@ -113,7 +118,7 @@ export default function Blocked() {
             }
 
             return (
-              <div key={block.id || block.ip_address} className="bg-[var(--color-sage)] rounded-[2rem] p-5 flex flex-col">
+              <div key={block.rule_id || block.ip_address} className="bg-[var(--color-sage)] rounded-[2rem] p-5 flex flex-col">
                 <div className="flex justify-between items-start mb-4">
                   <div className="font-mono text-sm font-medium text-gray-800 bg-gray-50 px-2 py-1 rounded">
                     {maskIp(block.ip_address)}
@@ -124,7 +129,7 @@ export default function Blocked() {
                 </div>
                 
                 <div className="mb-4 flex-1">
-                  <p className="text-sm font-medium text-dark">{threatInfo.title}</p>
+                  <p className="text-sm font-medium text-dark">{threatInfo.friendlyName}</p>
                   <p className="text-xs text-dark mt-1">Blocked {timeSince}</p>
                   {block.status === 'ACTIVE' && (
                     <p className="text-xs text-dark mt-1 flex items-center gap-1">
@@ -149,12 +154,13 @@ export default function Blocked() {
 
       {selectedIp && (
         <ConfirmModal
+          isOpen
           title={`Unblock ${maskIp(selectedIp)}?`}
-          description={`This address tried to ${selectedReason}. It will be able to reach your computer again.`}
-          primaryAction="Keep blocked"
-          secondaryAction="Unblock anyway"
-          onConfirm={() => setSelectedIp(null)}
-          onSecondary={confirmUnblock}
+          message={`This address was blocked for: ${selectedReason}. It will be able to reach your computer again.`}
+          cancelLabel="Keep blocked"
+          confirmLabel="Unblock anyway"
+          variant="danger"
+          onConfirm={confirmUnblock}
           onClose={() => setSelectedIp(null)}
         />
       )}

@@ -1,4 +1,4 @@
-﻿import React, { useContext } from 'react';
+﻿import { useContext } from 'react';
 import { ExpertContext } from '../App';
 import { translateThreat } from '../lib/translate';
 import * as Icons from 'lucide-react';
@@ -52,13 +52,13 @@ export function Learn() {
                 <div className="p-3 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg">
                   {getIcon(iconName)}
                 </div>
-                <h2 className="text-xl font-bold text-gray-900 ">{translated.label}</h2>
+                <h2 className="text-xl font-bold text-gray-900 ">{translated.friendlyName}</h2>
               </div>
               
               <div className="aesthetic-icons space-y-4 flex-grow">
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900  uppercase tracking-wider mb-1">What is it?</h3>
-                  <p className="text-dark  text-sm">{translated.description}</p>
+                  <p className="text-dark  text-sm">{translated.explanation}</p>
                 </div>
                 
                 <div>

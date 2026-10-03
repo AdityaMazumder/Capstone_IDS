@@ -1,5 +1,4 @@
-﻿import React from 'react';
-import { Info } from 'lucide-react';
+﻿import { Info } from 'lucide-react';
 
 export interface InfoTooltipProps {
   text: string;

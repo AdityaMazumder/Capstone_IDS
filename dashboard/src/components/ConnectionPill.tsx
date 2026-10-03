@@ -1,6 +1,4 @@
-﻿import React from 'react';
-
-export interface ConnectionPillProps {
+﻿export interface ConnectionPillProps {
   state: 'connected' | 'reconnecting' | 'offline';
 }
 

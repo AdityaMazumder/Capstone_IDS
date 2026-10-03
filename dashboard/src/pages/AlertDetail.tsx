@@ -1,50 +1,146 @@
-﻿import React, { useContext, useState } from 'react';
+﻿import { useContext, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  AlertTriangle,
   ArrowLeft,
   CheckCircle,
-  Copy,
   Download,
   Shield,
-  ShieldAlert,
   TestTube,
   XCircle,
   Clock,
-  Unlock
+  Unlock,
+  Info,
 } from 'lucide-react';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import { toast } from 'sonner';
 
 import { ExpertContext } from '../App';
 import { Skeleton, ErrorState, RiskGauge, TechDetails, ConfirmModal, StoryFlow, SeverityBadge } from '../components/index';
-import { getIncidentDetail, getHostIncidents, unblockIP, generateReport } from '../api/endpoints';
-import { translateThreat, translateFileType } from '../lib/translate';
-import {} from '../components/index';
+import { getIncidentDetail, getHostIncidents, unblockIP, generateReport, getReportDownloadUrl } from '../api/endpoints';
+import { translateThreat, translateFileType, translateHostAction, translateNetworkAction, formatDuration } from '../lib/translate';
 
 dayjs.extend(relativeTime);
 
+type ActionOutcome = 'done' | 'test' | 'failed' | 'other';
+
+interface AlertView {
+  source: 'network' | 'computer';
+  incidentId: string;
+  timestamp: number;
+  threatRaw: string;
+  severity: string;
+  riskScore: number;
+  confidence: number | null;
+  srcIp?: string;
+  dstIp?: string;
+  dstPort?: number;
+  processName?: string;
+  filePath?: string;
+  fileType?: string;
+  actionLabel: string;
+  outcome: ActionOutcome;
+  banSeconds?: number;
+  ruleId?: string;
+  ruleStatus?: string;
+  expiresAt?: number | null;
+  llm?: { summary?: string; soc_recommendations?: string[] } | null;
+  raw: Record<string, any>;
+}
+
+function outcomeFromStatus(status: string | null | undefined): ActionOutcome {
+  const s = (status || '').toUpperCase();
+  if (s.includes('FAILED')) return 'failed';
+  if (s.includes('SIMULATED')) return 'test';
+  if (s.includes('SUCCESS') || s === 'ACTIVE') return 'done';
+  return 'other';
+}
+
+// GET /api/incidents/{id} returns Incident.to_dict() (nested) when raw_json exists, otherwise the flat DB row.
+function networkView(d: any): AlertView {
+  if (d.flow) {
+    const rule = d.firewall_rule;
+    const action = d.action_plan?.action_type;
+    return {
+      source: 'network',
+      incidentId: d.incident_id,
+      timestamp: d.timestamp,
+      threatRaw: d.detection?.attack_type || 'Unknown',
+      severity: d.risk?.severity || 'LOW',
+      riskScore: d.risk?.score ?? 0,
+      confidence: d.detection?.confidence ?? null,
+      srcIp: d.flow.src_ip,
+      dstIp: d.flow.dst_ip,
+      dstPort: d.flow.dst_port,
+      actionLabel: translateNetworkAction(action, d.action_plan?.ban_duration_seconds),
+      outcome: rule ? outcomeFromStatus(rule.status) : 'other',
+      banSeconds: d.action_plan?.ban_duration_seconds,
+      ruleId: rule?.rule_id,
+      ruleStatus: rule?.status,
+      expiresAt: rule?.expires_at ?? null,
+      llm: d.llm_explanation,
+      raw: d,
+    };
+  }
+  return {
+    source: 'network',
+    incidentId: d.incident_id,
+    timestamp: d.timestamp,
+    threatRaw: d.attack_type || 'Unknown',
+    severity: d.severity || 'LOW',
+    riskScore: d.risk_score ?? 0,
+    confidence: d.confidence ?? null,
+    srcIp: d.src_ip,
+    dstIp: d.dst_ip,
+    dstPort: d.dst_port,
+    actionLabel: translateNetworkAction(d.action_taken),
+    outcome: 'other',
+    llm: null,
+    raw: d,
+  };
+}
+
+function hostView(row: any): AlertView {
+  const details = row.raw_json ? JSON.parse(row.raw_json) : {};
+  return {
+    source: 'computer',
+    incidentId: row.incident_id,
+    timestamp: row.timestamp,
+    threatRaw: row.classification || 'Unknown',
+    severity: row.severity || 'LOW',
+    riskScore: row.risk_score ?? 0,
+    confidence: row.confidence ?? null,
+    processName: row.process_name,
+    filePath: row.file_path,
+    fileType: row.file_type,
+    actionLabel: translateHostAction(row.soar_action),
+    outcome: outcomeFromStatus(row.action_status),
+    llm: details.llm_explanation,
+    raw: { ...row, raw_json: undefined, details },
+  };
+}
+
 export default function AlertDetail() {
   const { expert } = useContext(ExpertContext);
+  const queryClient = useQueryClient();
   const { source, id } = useParams<{ source: string; id: string }>();
   const [unblockModalOpen, setUnblockModalOpen] = useState(false);
   const [isReviewed, setIsReviewed] = useState(
     localStorage.getItem(`sentinel_reviewed_${id}`) === 'true'
   );
 
-  const { data, isLoading, error } = useQuery({
+  const { data: view, isLoading, error } = useQuery({
     queryKey: ['incident-detail', source, id],
-    queryFn: async () => {
+    queryFn: async (): Promise<AlertView> => {
       if (source === 'network') {
-        return await getIncidentDetail(id!);
-      } else if (source === 'computer') {
-        const incidents = await getHostIncidents(500);
-        const incident = incidents.find((i: any) => i.id === id);
-        if (incident && incident.raw_json) {
-          incident.details = JSON.parse(incident.raw_json);
-        }
-        return incident;
+        return networkView(await getIncidentDetail(id!));
+      }
+      if (source === 'computer') {
+        const { host_incidents } = await getHostIncidents(500);
+        const incident = host_incidents.find((i) => i.incident_id === id);
+        if (!incident) throw new Error('Incident not found');
+        return hostView(incident);
       }
       throw new Error('Unknown source');
     },
@@ -52,56 +148,64 @@ export default function AlertDetail() {
   });
 
   if (isLoading) return <div className="p-6 max-w-4xl mx-auto"><Skeleton className="h-64 w-full" /></div>;
-  if (error || !data) return <div className="p-6 max-w-4xl mx-auto"><ErrorState message="Could not load alert details." /></div>;
+  if (error || !view) return <div className="p-6 max-w-4xl mx-auto"><ErrorState message="Could not load alert details." /></div>;
 
   const markReviewed = () => {
     localStorage.setItem(`sentinel_reviewed_${id}`, 'true');
     setIsReviewed(true);
   };
 
-  const handleDownload = () => {
-    generateReport(id!);
-  };
-
-  const handleUnblock = async () => {
-    if (source === 'network' && data.src_ip) {
-      await unblockIP(data.src_ip);
-      setUnblockModalOpen(false);
+  const handleDownload = async () => {
+    try {
+      const report = await generateReport();
+      window.open(getReportDownloadUrl(report.filename), '_blank');
+    } catch {
+      toast.error("Couldn't create the report");
     }
   };
 
-  // Compute values
-  const threatInfo = translateThreat(data.attack_label || data.event_type || 'Unknown');
-  const severity = data.severity || threatInfo.severity;
-  const time = dayjs(data.timestamp);
-  
-  let llmSummary = data.llm_explanation?.summary;
-  let summary = llmSummary || threatInfo.template;
-  if (source === 'network') {
-    summary = summary.replace('{src_ip}', data.src_ip).replace('{dst_port}', data.dst_port);
-  } else if (source === 'computer') {
-    summary = `${data.process_name || 'A program'} tried to access ${translateFileType(data.file_path || '')}. ${summary}`;
+  const handleUnblock = async () => {
+    if (!view.ruleId) return;
+    try {
+      await unblockIP(view.ruleId);
+      toast.success('Address unblocked');
+      queryClient.invalidateQueries({ queryKey: ['blocks'] });
+      queryClient.invalidateQueries({ queryKey: ['incident-detail', source, id] });
+    } catch {
+      toast.error('Failed to unblock address');
+    }
+  };
+
+  const threatInfo = translateThreat(view.threatRaw);
+  const time = dayjs.unix(view.timestamp);
+  const targetFile = translateFileType(view.fileType, view.filePath);
+
+  let summary: string = view.llm?.summary || threatInfo.explanation;
+  if (view.source === 'computer') {
+    summary = `${view.processName || 'A program'} tried to access ${targetFile}. ${summary}`;
   }
 
-  const confidence = data.confidence ? Math.round(data.confidence * 100) : 85;
-  const riskScore = data.anomaly_score || 5; 
+  const confidence = view.confidence != null ? Math.round(view.confidence * 100) : null;
 
-  const expiry = data.expiry_timestamp ? dayjs(data.expiry_timestamp) : null;
-  const timerText = expiry ? `Block ends in ${expiry.diff(dayjs(), 'hour')}h ${expiry.diff(dayjs(), 'minute') % 60}m` : '';
+  const expiry = view.expiresAt ? dayjs.unix(view.expiresAt) : null;
+  const minutesLeft = expiry ? Math.max(expiry.diff(dayjs(), 'minute'), 0) : 0;
+  const timerText = expiry ? `Block ends in ${Math.floor(minutesLeft / 60)}h ${minutesLeft % 60}m` : '';
 
-  const isNetworkBlockActive = source === 'network' && data.soar_action === 'BLOCK_IP' && data.action_status === 'ACTIVE';
+  const canUnblock = view.source === 'network' && !!view.ruleId && ['ACTIVE', 'SIMULATED'].includes((view.ruleStatus || '').toUpperCase());
 
-  let advice = data.llm_explanation?.soc_recommendations || threatInfo.advice;
-  if (threatInfo.isStealer || source === 'computer') {
+  let advice: string[] = view.llm?.soc_recommendations?.length
+    ? view.llm.soc_recommendations
+    : [threatInfo.advice].filter(Boolean);
+  if (view.threatRaw.toLowerCase().includes('stealer') || view.source === 'computer') {
     advice = [
-      "Change the passwords saved in your browser.",
-      "Sign out of all sessions on important websites (email, bank).",
-      "Run a full antivirus scan.",
-      ...(Array.isArray(advice) ? advice : [advice])
+      'Change the passwords saved in your browser.',
+      'Sign out of all sessions on important websites (email, bank).',
+      'Run a full antivirus scan.',
+      ...advice,
     ];
-  } else if (!Array.isArray(advice)) {
-    advice = [advice];
   }
+
+  const blockedFor = view.banSeconds ? ` for ${formatDuration(view.banSeconds)}` : '';
 
   return (
     <div className="aesthetic-icons max-w-4xl mx-auto p-4 md:p-6 space-y-6 text-gray-800">
@@ -112,8 +216,8 @@ export default function AlertDetail() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[var(--color-sage)] p-6 rounded-[2rem]">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <SeverityBadge severity={severity} />
-            <h1 className="text-xl font-semibold">{threatInfo.title}</h1>
+            <SeverityBadge severity={view.severity} />
+            <h1 className="text-xl font-semibold">{threatInfo.friendlyName}</h1>
           </div>
           <p className="text-sm text-dark" title={time.format('YYYY-MM-DD HH:mm:ss')}>
             {time.fromNow()}
@@ -138,9 +242,20 @@ export default function AlertDetail() {
             What happened?
           </h2>
           <p className="text-dark leading-relaxed">{summary}</p>
-          
-          {source === 'computer' && (
-             <StoryFlow process={data.process_name} target={translateFileType(data.file_path)} response={data.soar_action} />
+          {view.source === 'network' && expert && view.srcIp && (
+            <p className="text-xs font-mono text-dark">
+              {view.srcIp} &rarr; {view.dstIp}{view.dstPort ? `:${view.dstPort}` : ''}
+            </p>
+          )}
+
+          {view.source === 'computer' && (
+             <StoryFlow
+               steps={[
+                 { icon: 'cpu', label: view.processName || 'A program' },
+                 { icon: 'file-lock', label: targetFile },
+                 { icon: 'shield', label: view.actionLabel },
+               ]}
+             />
           )}
         </div>
 
@@ -150,8 +265,10 @@ export default function AlertDetail() {
             How dangerous is it?
           </h2>
           <div className="flex flex-col items-center">
-             <RiskGauge score={riskScore} />
-             <p className="mt-4 text-sm text-dark font-medium">We're {confidence}% sure this is real.</p>
+             <RiskGauge score={view.riskScore} />
+             {confidence != null && (
+               <p className="mt-4 text-sm text-dark font-medium">We're {confidence}% sure this is real.</p>
+             )}
           </div>
         </div>
 
@@ -161,24 +278,29 @@ export default function AlertDetail() {
             What did SentinelAI do?
           </h2>
           <div className="bg-gray-50 rounded-lg p-4 flex items-start gap-4">
-            {data.action_status === 'ACTIVE' && data.soar_action === 'BLOCK_IP' && (
+            {view.outcome === 'done' && (
                <>
-                 <CheckCircle className="w-6 h-6 text-emerald-500 shrink-0 mt-0.5" />
+                 {view.source === 'network'
+                   ? <CheckCircle className="w-6 h-6 text-emerald-500 shrink-0 mt-0.5" />
+                   : <Shield className="w-6 h-6 text-emerald-500 shrink-0 mt-0.5" />}
                  <div>
-                   <p className="font-medium text-gray-800">Blocked this address for 24h</p>
+                   <p className="font-medium text-gray-800">
+                     {view.source === 'network' ? `Blocked this address${blockedFor}` : view.actionLabel}
+                   </p>
                    {timerText && <p className="text-sm text-dark mt-1 flex items-center gap-1"><Clock className="w-3 h-3" /> {timerText}</p>}
                  </div>
                </>
             )}
-            {data.action_status === 'SIMULATED' && (
+            {view.outcome === 'test' && (
                <>
                  <TestTube className="w-6 h-6 text-blue-500 shrink-0 mt-0.5" />
                  <div>
-                   <p className="font-medium text-gray-800">Test mode: we would have {source === 'network' ? 'blocked this address' : 'stopped this program'}</p>
+                   <p className="font-medium text-gray-800">Test mode: we would have {view.source === 'network' ? `blocked this address${blockedFor}` : view.actionLabel.toLowerCase()}</p>
+                   {timerText && <p className="text-sm text-dark mt-1 flex items-center gap-1"><Clock className="w-3 h-3" /> {timerText}</p>}
                  </div>
                </>
             )}
-            {data.action_status === 'FAILED' && (
+            {view.outcome === 'failed' && (
                <>
                  <XCircle className="w-6 h-6 text-rose-500 shrink-0 mt-0.5" />
                  <div>
@@ -186,17 +308,17 @@ export default function AlertDetail() {
                  </div>
                </>
             )}
-            {source === 'computer' && data.action_status === 'SUCCESS' && (
+            {view.outcome === 'other' && (
                <>
-                 <Shield className="w-6 h-6 text-emerald-500 shrink-0 mt-0.5" />
+                 <Info className="w-6 h-6 text-slate-500 shrink-0 mt-0.5" />
                  <div>
-                   <p className="font-medium text-gray-800">Stopped the program</p>
+                   <p className="font-medium text-gray-800">{view.actionLabel}</p>
                  </div>
                </>
             )}
           </div>
-          
-          {isNetworkBlockActive && (
+
+          {canUnblock && (
             <button onClick={() => setUnblockModalOpen(true)} className="mt-2 text-sm text-blue-600 font-medium hover:underline flex items-center gap-1">
               <Unlock className="w-4 h-4" /> Unblock this address
             </button>
@@ -209,7 +331,7 @@ export default function AlertDetail() {
             What should you do?
           </h2>
           <ul className="space-y-2">
-            {advice.map((item: string, idx: number) => (
+            {advice.map((item, idx) => (
               <li key={idx} className="flex items-start gap-2 text-sm text-dark">
                 <div className="w-1.5 h-1.5 rounded-full bg-gray-400 mt-1.5 shrink-0" />
                 {item}
@@ -220,21 +342,19 @@ export default function AlertDetail() {
       </div>
 
       <div className="bg-[var(--color-sage)] rounded-[2rem] overflow-hidden">
-        <TechDetails data={data} source={source} expert={expert} />
+        <TechDetails data={view.raw} defaultOpen={expert} />
       </div>
 
-      {unblockModalOpen && (
-        <ConfirmModal
-          title="Unblock this address?"
-          description={`Are you sure you want to unblock ${data.src_ip}? This address tried to ${threatInfo.title}. It will be able to reach your computer again.`}
-          primaryAction="Keep blocked"
-          secondaryAction="Unblock anyway"
-          onConfirm={() => setUnblockModalOpen(false)}
-          onSecondary={handleUnblock}
-          onClose={() => setUnblockModalOpen(false)}
-        />
-      )}
+      <ConfirmModal
+        isOpen={unblockModalOpen}
+        title="Unblock this address?"
+        message={`Are you sure you want to unblock ${view.srcIp}? It was blocked for: ${threatInfo.friendlyName.toLowerCase()}. It will be able to reach your computer again.`}
+        cancelLabel="Keep blocked"
+        confirmLabel="Unblock anyway"
+        variant="danger"
+        onConfirm={handleUnblock}
+        onClose={() => setUnblockModalOpen(false)}
+      />
     </div>
   );
 }
-

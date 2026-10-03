@@ -1,6 +1,6 @@
 # SentinelAI — Project Gameplan & Blueprint
 
-**Status date:** September 2026 (ML package v2 frozen)  
+**Status date:** October 2026 (working end-to-end prototype: NIDS v3 + HIDS + SOAR + live dashboard)  
 **Vision:** Hybrid **NIDS + HIDS + multi-agent SOAR + explainable alerts** for Windows  
 **Repo:** `AvaneshJ/Capstone_IDS` (SSH: `git@github-personal:…`)
 
@@ -24,8 +24,10 @@ Detect **network attacks** and **host malware behaviour** on Windows, explain th
 | Phase-1 robustness story (3-class archive) | `docs/Phase1_Progress_Report.md` | Experiments A–C, port-rule baseline; historical only |
 | Feature contract | `docs/features_list.md`, `models/feature_columns_v2.pkl` | Canonical 77-column order for live inference |
 | Multi-agent SOAR + real model | `soar/` | Packet → Detection (CicXgbAdapter) → Threat → Risk → Decision → Firewall → Alert → Logging → Report (+ LLM) |
-| Policies / SQLite / FastAPI stub | `soar/rules/`, `soar/database/`, `soar/api/` | Wired to v2 model on CSV/demo; need **live** inputs |
+| Policies / SQLite / FastAPI | `soar/rules/`, `soar/database/`, `soar/api/` | Wired to the v3 model; REST + WebSocket used by the dashboard |
 | Demo path | `soar/demo_real_model.py`, `soar/demo_runner.py`, `soar/main.py` | Supervisor walkthrough of agent pipeline |
+| HIDS | `hids/`, `soar/agents/host_agent.py` | Process + credential-file sensors, Isolation Forest, HostBridge → SOAR (dry-run kill) |
+| Dashboard | `dashboard/` | React 19 + Vite; live alerts over WebSocket, network + host incidents, unblock, PDF reports, Demo panel |
 
 ### Critical gap (integration) — updated
 
@@ -75,8 +77,8 @@ Do **not** claim all attack types on day one. Expand labels only when you have d
 | **T0 — Done** | Offline **6-class** NIDS v2 + SOAR demo on CSV / synthetic flows | Frozen (`ML_Package_v2.md`) |
 | **T1 — Next** | Lab PCAP/live flows → feature bridge → real XGBoost predict + log | Immediate priority |
 | **T2** | SOAR on live NIDS hits (dry-run firewall → approved block) | After T1 stable |
-| **T3** | Minimal HIDS (process + sensitive file/cookie path access) + second model | Parallel after T1 starts |
-| **T4** | Correlation (host + network same incident) + React dashboard | After T2/T3 evidence exists |
+| **T3 — Prototype done** | Minimal HIDS (process + sensitive file/cookie path access) + Isolation Forest | Parallel after T1 starts |
+| **T4 — Dashboard done** | Correlation (host + network same incident) + React dashboard | Correlation still open |
 | **T5** | Extra NIDS classes (e.g. Port Scan) via more CIC days / retrain | Only after T1 works; DDoS/DoS/Botnet already in v2 |
 
 Supervisor CVE note: if required, **anchor HIDS** to one Windows CVE as a **case study** (mitigation + behavioural simulation). Platform stays the same; case study changes. Prefer network-visible or behaviour-demo CVEs — not “we wrote an RCE exploit.”
@@ -153,7 +155,10 @@ Capstone/
 
 **Exit criteria:** One end-to-end NIDS incident: detect → risk → decision → (dry) block → DB → PDF.
 
-### Phase 5 — HIDS module
+### Phase 5 — HIDS module — **PROTOTYPE DONE**
+Sensors (`hids/process_monitor.py`, `hids/file_monitor.py`), stealer simulator + dataset, Isolation Forest
+(`models/hids_isolation_forest.joblib`), `hids/live.py` → `HostAgent` (MITRE T1555.003 / T1539, dry-run termination).
+
 1. `psutil` + `watchdog`: process create, path touches under Chrome/Discord/Steam cookie/token locations  
 2. Small labelled behavioural dataset (benign vs simulated stealer-like access patterns in **lab**)  
 3. Isolation Forest and/or second XGBoost  
@@ -161,12 +166,13 @@ Capstone/
 
 **Exit criteria:** Simulated “cookie DB read + sudden outbound” story produces host incident + user-readable alert (quarantine/kill **only** for processes you launched in lab).
 
-### Phase 6 — Correlation + Dashboard
-1. Correlate host + network windows (same time / same outbound IP)  
-2. React + WebSocket live alerts, timeline, Recharts  
-3. FastAPI already in repo — extend for dashboard contract  
+### Phase 6 — Correlation + Dashboard — **DASHBOARD DONE, CORRELATION OPEN**
+1. Correlate host + network windows (same time / same outbound IP) — **not started**  
+2. React + WebSocket live alerts, timeline, Recharts — **done** (`dashboard/`)  
+3. FastAPI extended for dashboard contract — **done** (host endpoints, `incident_id` on live alerts; `soar/contracts/teammate_contracts.md`)  
 
-**Exit criteria:** User sees story-style alerts, not raw flags.
+**Exit criteria:** User sees story-style alerts, not raw flags. — **met** in the prototype (verified end to end:
+SSH brute-force flow → simulated block, stealer event → simulated kill, both shown live with a linked detail page).
 
 ### Phase 7 — Expand NIDS classes (optional)
 - Add CIC days for Port Scan / DDoS only after live bridge works  
@@ -202,9 +208,9 @@ Keep a simple CSV: `timestamp, scenario, expected, predicted, confidence, notes`
 
 ---
 
-## 8. Immediate gameplan (next 2–3 weeks)
+## 8. Original gameplan (September 2026, kept for history)
 
-Ordered; do not skip ahead to React.
+Superseded by section 13 now that HIDS and the dashboard prototype exist.
 
 ### Week A — Integration + honesty in demos — **DONE**
 1. Feature contract + v2 artefacts documented (`ML_Package_v2.md`).  
@@ -237,7 +243,7 @@ Ordered; do not skip ahead to React.
 | **1 — AIML** | `ml/`, `models/`, HIDS model later, live eval scorecard | Package **frozen** at v2; support live scorecard only |
 | **2 — Capture / security** | `nids/` capture + extractor, lab attacks | PCAP/live → flow dict (**next bottleneck**) |
 | **3 — SOAR** | `soar/` | Policies + dry-run response on live hits |
-| **4 — Dashboard** | `dashboard/` + API consumer | Wait for stable incident JSON; then React + WS |
+| **4 — Dashboard** | `dashboard/` + API consumer | React + WS dashboard wired to the live API (done); polish + new features |
 
 ---
 
@@ -269,12 +275,12 @@ Minimum shippable Capstone story:
 
 ---
 
-## 13. What to do next (after ML freeze)
+## 13. What to do next (after the working prototype)
 
-1. Confirm `python soar\demo_real_model.py` still runs on this machine.  
-2. Install/verify VirtualBox; download Kali OVA if not present.  
-3. Start Week B lab plumbing — do **not** retrain v2.  
-4. Do **not** start the React app yet.
+1. Run the full stack (`README.md` quick start) and keep the end-to-end demo working.  
+2. Host + network correlation into one incident (Phase 6, item 1).  
+3. Live NIDS capture straight into the API (`/api/flows/ingest`) instead of CSV replay, with a scorecard.  
+4. Fixes and features from the dashboard review; decide when (if ever) to leave test mode for real `netsh` blocks.
 
 ---
 

@@ -1,6 +1,4 @@
-﻿import React from 'react';
-
-// Add this to your global CSS:
+﻿// Add this to your global CSS:
 // .skeleton { @apply animate-pulse bg-slate-200 ; }
 
 export function Skeleton({ className = '' }: { className?: string }) {

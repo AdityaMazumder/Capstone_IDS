@@ -1,14 +1,16 @@
-﻿import React, { useState, useRef, useEffect } from 'react';
+﻿import { useState, useRef, useEffect } from 'react';
 import { Bell, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import { alertLink } from '../hooks/useLiveStream';
+import type { LiveNotification } from '../hooks/useLiveStream';
 
 dayjs.extend(relativeTime);
 
 export interface NotificationBellProps {
   unreadCount: number;
-  notifications: any[];
+  notifications: LiveNotification[];
   onMarkAllRead: () => void;
 }
 
@@ -63,10 +65,10 @@ export function NotificationBell({ unreadCount, notifications, onMarkAllRead }: 
               </div>
             ) : (
               <div className="divide-y divide-slate-50 dark:divide-slate-800">
-                {notifications.slice(0, 20).map((n, i) => (
+                {notifications.slice(0, 20).map((n) => (
                   <Link 
-                    key={i}
-                    to={`/activity/${n.source}/${n.id}`}
+                    key={n.id}
+                    to={alertLink(n)}
                     onClick={() => setIsOpen(false)}
                     className="block p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                   >
@@ -80,7 +82,7 @@ export function NotificationBell({ unreadCount, notifications, onMarkAllRead }: 
                           {n.story}
                         </p>
                         <p className="text-[10px] text-dark mt-2 font-medium uppercase tracking-wider">
-                          {dayjs(n.timestamp).fromNow()}
+                          {dayjs.unix(n.time).fromNow()}
                         </p>
                       </div>
                     </div>

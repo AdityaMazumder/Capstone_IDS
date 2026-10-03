@@ -165,6 +165,7 @@ class AlertMessage:
     action_taken: str = ""
     channels: List[str] = field(default_factory=lambda: ["DASHBOARD", "CONSOLE"])
     source: str = "NIDS"  # NIDS or HIDS
+    incident_id: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)

@@ -1,4 +1,4 @@
-﻿import React, { useContext, useMemo } from 'react';
+﻿import { useContext, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Activity, ShieldAlert, Ban, Gauge, ChevronRight } from 'lucide-react';
@@ -9,20 +9,18 @@ import { StatusBanner } from '../components/StatusBanner';
 import { KpiCard } from '../components/KpiCard';
 import { AlertCard } from '../components/AlertCard';
 import { InfoTooltip } from '../components/InfoTooltip';
-import { Skeleton } from '../components/Skeleton';
-import { ErrorState } from '../components/ErrorState';
+import { Skeleton, SkeletonList } from '../components/Skeleton';
 import { getMetrics, getBlocks } from '../api/endpoints';
 import { useMergedActivity } from '../hooks/useMergedActivity';
 import { useOverallStatus } from '../hooks/useOverallStatus';
 import { translateThreat, riskToWord, isBenign } from '../lib/translate';
-import { getHourBucket } from '../lib/time';
 
 const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4'];
 
 export default function Home() {
   const { expert } = useContext(ExpertContext);
   
-  const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery({
+  const { data: metrics, isLoading: metricsLoading } = useQuery({
     queryKey: ['metrics'],
     queryFn: getMetrics,
     refetchInterval: 10000,
@@ -34,7 +32,7 @@ export default function Home() {
     refetchInterval: 15000,
   });
 
-  const { activity, isLoading: activityLoading } = useMergedActivity();
+  const { alerts: activity, isLoading: activityLoading } = useMergedActivity();
   const overallStatus = useOverallStatus();
 
   const chartData = useMemo(() => {
@@ -45,9 +43,9 @@ export default function Home() {
       buckets[now.subtract(i, 'hour').format('HA')] = 0;
     }
     
-    activity.forEach((item: any) => {
-      if (now.diff(dayjs(item.timestamp * 1000), 'hour') < 24) {
-        const bucket = dayjs(item.timestamp * 1000).format('HA');
+    activity.forEach((item) => {
+      if (now.diff(dayjs.unix(item.time), 'hour') < 24) {
+        const bucket = dayjs.unix(item.time).format('HA');
         if (buckets[bucket] !== undefined) {
           buckets[bucket]++;
         }
@@ -62,7 +60,7 @@ export default function Home() {
     return Object.entries(metrics.attack_distribution)
       .filter(([type]) => !isBenign(type))
       .map(([type, count]) => ({
-        name: translateThreat(type).title,
+        name: translateThreat(type).friendlyName,
         value: count as number,
         rawType: type
       }))
@@ -71,7 +69,7 @@ export default function Home() {
 
   const latestAlerts = useMemo(() => {
     if (!activity) return [];
-    return activity.filter((a: any) => !isBenign(a.type)).slice(0, 5);
+    return activity.filter((a) => !isBenign(a.typeRaw)).slice(0, 5);
   }, [activity]);
 
   const topOffender = metrics?.top_offenders?.[0];
@@ -92,7 +90,7 @@ export default function Home() {
         {metricsLoading ? <Skeleton className="h-24 w-full" /> : (
           <KpiCard
             icon={<ShieldAlert size={24} />}
-            value={new Intl.NumberFormat().format((metrics?.total_threats_detected || 0) + (activity?.filter((a: any) => a.source === 'host').length || 0))}
+            value={new Intl.NumberFormat().format((metrics?.total_threats_detected || 0) + (activity?.filter((a) => a.source === 'computer').length || 0))}
             title="Threats caught"
             helperText="Suspicious things we found and handled"
           />
@@ -131,7 +129,7 @@ export default function Home() {
                   <YAxis stroke="#6B7280" fontSize={12} tickLine={false} axisLine={false} />
                   <Tooltip 
                     contentStyle={{ borderRadius: '0.75rem', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                    formatter={(value: number) => [value, 'Threats']}
+                    formatter={(value) => [value ?? 0, 'Threats']}
                     labelStyle={{ color: '#1A1A1A', fontWeight: 'bold', marginBottom: '4px' }}
                   />
                   <Area type="monotone" dataKey="threats" stroke="#4F46E5" strokeWidth={3} fill="#4F46E5" fillOpacity={0.2} />
@@ -163,7 +161,7 @@ export default function Home() {
                     paddingAngle={5}
                     dataKey="value"
                   >
-                    {pieData.map((entry, index) => (
+                    {pieData.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -190,13 +188,13 @@ export default function Home() {
           </Link>
         </div>
         
-        {activityLoading ? <Skeleton className="h-32 w-full mb-2" count={3} /> : latestAlerts.length === 0 ? (
+        {activityLoading ? <SkeletonList count={3} /> : latestAlerts.length === 0 ? (
           <div className="text-center py-8 text-[#1A1A1A] font-bold">
             All clear! No recent threats detected.
           </div>
         ) : (
           <div className="space-y-3">
-            {latestAlerts.map((alert: any) => (
+            {latestAlerts.map((alert) => (
               <AlertCard key={`${alert.source}-${alert.id}`} alert={alert} />
             ))}
           </div>

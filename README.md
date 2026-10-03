@@ -1,43 +1,69 @@
 # SentinelAI — Hybrid NIDS + HIDS + Multi-Agent SOAR
 
-CSE-CIC-**IDS2018**-style network detection (**frozen** 6-class XGBoost v2, 77 flow features, no `Dst Port`, hybrid `dst_port` policy)
-plus a multi-agent SOAR pipeline, with HIDS and dashboard stubs for later phases.
+Windows defence platform that detects **network attacks** (XGBoost on CSE-CIC-**IDS2018**-style flow features)
+and **host infostealer behaviour** (Isolation Forest on process + credential-file activity), then orchestrates a
+response through a multi-agent SOAR pipeline and shows it live in a React dashboard.
 
-**ML package:** see `docs/ML_Package_v2.md` (do not retrain unless live demo forces a `v3`).
+**Status:** working end-to-end prototype. Sensors → SOAR → SQLite → FastAPI/WebSocket → dashboard, with firewall
+blocks and process kills in **test mode (dry-run)** by default.
+
+**ML packages:** active NIDS model is **v3** (CIC + lab merge, 7 classes incl. `PortScan`) — see `docs/ML_Package_v3.md`.
+The CIC-only **v2** package stays on disk as rollback (`docs/ML_Package_v2.md`).
 
 ## Layout
 
 ```text
 Capstone/
-├── config/           # Shared paths (single source of truth: config/paths.py)
+├── config/           # Shared paths (single source of truth: config/paths.py, points at v3)
 ├── data/             # Local datasets only (gitignored)
-├── docs/             # Reports, feature contract, gameplan, ML freeze
+├── docs/             # Reports, feature contract, gameplan, ML package notes
 ├── ml/               # Offline dataset building / train / eval  (+ tests/)
-├── models/           # Frozen XGBoost v2/v3 artefacts (model, encoder, feature columns)
+├── models/           # XGBoost v2/v3 artefacts + HIDS Isolation Forest
 ├── nids/             # Live capture + feature bridge + predict  (+ tests/)
 ├── hids/             # Host sensors, Isolation Forest scoring, SOAR bridge (+ tests/)
-│   └── dataset/      # Member 2: stealer simulator, feature engineering, dataset builder
-├── soar/             # Multi-agent SOAR (Detection → Response → Report)  (+ tests/)
-├── dashboard/        # React UI placeholder (Phase 6)
-├── requirements.txt  # Single dependency list for the whole project
+│   └── dataset/      # Stealer simulator, feature engineering, dataset builder, training
+├── soar/             # Multi-agent SOAR + FastAPI backend  (+ tests/)
+├── dashboard/        # React + Vite SOC dashboard (live via WebSocket)
+├── requirements.txt  # Single Python dependency list for the whole project
 └── README.md
 ```
 
 ## Quick start
 
-```powershell
-cd c:\Capstone
-pip install -r requirements.txt          # one list covers NIDS, ML, SOAR, HIDS
+Python 3.11+ (tested on 3.14) and Node.js 20+.
 
-# Frozen v2 model on one CSV row
+```powershell
+# 1. Python environment (repo root)
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt          # one list covers NIDS, ML, SOAR (incl. FastAPI/uvicorn), HIDS
+
+# 2. Backend API + WebSocket (terminal 1)
+cd soar
+python main.py server                    # http://127.0.0.1:8000  (Swagger: /docs)
+
+# 3. Dashboard (terminal 2)
+cd dashboard
+npm install
+copy .env.example .env.local             # first time only
+npm run dev                              # http://localhost:5173
+```
+
+Turn on **Expert** mode in the dashboard top bar to get the **Demo Panel**, which sends a sample network attack
+or host stealer event through the real pipeline.
+
+### Other entry points
+
+```powershell
+# Active model on one CSV row
 python -m nids.live_predict --row 0
 
-# Real model through full SOAR pipeline
+# Real model through full SOAR pipeline (CLI)
 python soar\demo_real_model.py
 
-# Agent golden demo (heuristics if CSV rows not attached)
-cd soar
-python demo_runner.py
+# Agent golden demo / synthetic stream (from soar/)
+python main.py demo
+python main.py simulate --dry-run
 
 # HIDS: score a finished run, or run the sensors into SOAR (dry-run, no process kill)
 python -m hids.predict
@@ -48,15 +74,19 @@ python -m hids.live --duration 600
 
 ```powershell
 python -m pytest nids/tests ml/tests hids/tests soar/tests -q
+
+cd dashboard
+npm run build                            # type-check (tsc -b) + production build
 ```
 
 ## Dataset citation
 
-Working flow CSV matches **CSE-CIC-IDS2018** multiclass labels
-(`Benign`, `Botnet`, `DDoS`, `DoS`, `FTP-BruteForce`, `SSH-Bruteforce`).
+Network flow CSVs follow **CSE-CIC-IDS2018** multiclass labels
+(`Benign`, `Botnet`, `DDoS`, `DoS`, `FTP-BruteForce`, `SSH-Bruteforce`); v3 adds a lab `PortScan` class.
 
 ## Integration rule
 
-`nids/` and `hids/` emit evidence. **`soar/` owns response** (risk, firewall dry-run, alerts, SQLite, PDF).
+`nids/` and `hids/` emit evidence. **`soar/` owns response** (risk, firewall, process kill, alerts, SQLite, PDF).
+`dashboard/` only talks to the SOAR API (`soar/contracts/teammate_contracts.md`).
 
-See `docs/Project_Gameplan_Blueprint.md` for the full roadmap. Next priority: **live lab feature bridge**, not more offline training.
+See `docs/Project_Gameplan_Blueprint.md` for the roadmap.

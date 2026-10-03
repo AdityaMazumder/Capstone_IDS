@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getMetrics, getIncidents, getHostIncidents, getBlocks, getHealthCheck } from '../api/endpoints';
+import { getMetrics, getIncidents, getHostIncidents, getHealthCheck } from '../api/endpoints';
 
 export type OverallStatus = 'protected' | 'handled' | 'action_needed' | 'offline';
 
@@ -12,7 +12,7 @@ interface OverallStatusResult {
 }
 
 export function useOverallStatus(): OverallStatusResult {
-  const { data: health, error: healthError } = useQuery({
+  const { error: healthError } = useQuery({
     queryKey: ['health-check'],
     queryFn: getHealthCheck,
     refetchInterval: 15000,
@@ -70,13 +70,16 @@ export function useOverallStatus(): OverallStatusResult {
       return status.includes('FAILED');
     });
 
-    const hasCriticalNew = allRecent.some((i: any) => {
-      return i.timestamp >= lastHour &&
-        i.severity?.toUpperCase() === 'CRITICAL' &&
-        (i.status?.toUpperCase() === 'NEW' || !i.status);
+    // Incidents stay 'NEW' even after the pipeline handles them, so only count critical
+    // threats that SentinelAI didn't automatically act on.
+    const NOT_HANDLED = ['ALERT_ONLY', 'LOG_ONLY', 'IGNORE'];
+    const hasUnhandledCritical = allRecent.some((i: any) => {
+      if (i.timestamp < lastHour || i.severity?.toUpperCase() !== 'CRITICAL') return false;
+      const action = (i.action_taken || i.soar_action || '').toUpperCase();
+      return NOT_HANDLED.includes(action);
     });
 
-    if (hasFailed || hasCriticalNew) {
+    if (hasFailed || hasUnhandledCritical) {
       return {
         status: 'action_needed' as OverallStatus,
         message: 'Something needs your attention.',

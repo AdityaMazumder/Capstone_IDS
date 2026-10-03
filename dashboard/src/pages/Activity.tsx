@@ -1,4 +1,4 @@
-﻿import React, { useContext, useState, useMemo } from 'react';
+﻿import { useContext, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { ExpertContext } from '../App';
@@ -6,13 +6,21 @@ import { AlertCard } from '../components/AlertCard';
 import { Skeleton } from '../components/Skeleton';
 import { ErrorState } from '../components/ErrorState';
 import { useMergedActivity } from '../hooks/useMergedActivity';
-import { translateThreat, riskToWord, isBenign } from '../lib/translate';
+import type { MergedAlert } from '../hooks/useMergedActivity';
+import { riskToWord, isBenign } from '../lib/translate';
 import { formatTime } from '../lib/time';
+
+const DANGER_TO_SEVERITY: Record<string, string> = {
+  critical: 'CRITICAL',
+  serious: 'HIGH',
+  look: 'MEDIUM',
+  minor: 'LOW',
+};
 
 export default function Activity() {
   const { expert } = useContext(ExpertContext);
   const [searchParams, setSearchParams] = useSearchParams();
-  const { activity, isLoading, error } = useMergedActivity();
+  const { alerts: activity, isLoading, error } = useMergedActivity();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showBenign, setShowBenign] = useState(false);
@@ -33,22 +41,13 @@ export default function Activity() {
 
   const filteredActivity = useMemo(() => {
     if (!activity) return [];
-    return activity.filter((item: any) => {
-      if (!showBenign && isBenign(item.type)) return false;
-      if (filterSource !== 'all') {
-        if (filterSource === 'network' && item.source !== 'network') return false;
-        if (filterSource === 'computer' && item.source !== 'host') return false;
-      }
-      if (filterDanger !== 'all') {
-        const riskLevel = riskToWord(item.risk_score || 0).label.toLowerCase();
-        if (filterDanger === 'critical' && riskLevel !== 'critical') return false;
-        if (filterDanger === 'serious' && riskLevel !== 'serious') return false;
-        if (filterDanger === 'look' && riskLevel !== 'look') return false;
-        if (filterDanger === 'minor' && riskLevel !== 'minor') return false;
-      }
+    return activity.filter((item) => {
+      if (!showBenign && isBenign(item.typeRaw)) return false;
+      if (filterSource !== 'all' && item.source !== filterSource) return false;
+      if (filterDanger !== 'all' && item.severityRaw?.toUpperCase() !== DANGER_TO_SEVERITY[filterDanger]) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        const searchStr = `${item.type} ${item.src_ip} ${item.process_name}`.toLowerCase();
+        const searchStr = `${item.typeRaw} ${item.title} ${item.srcIp ?? ''} ${item.processName ?? ''}`.toLowerCase();
         if (!searchStr.includes(q)) return false;
       }
       return true;
@@ -56,9 +55,9 @@ export default function Activity() {
   }, [activity, filterSource, filterDanger, searchQuery, showBenign]);
 
   const groupedActivity = useMemo(() => {
-    const groups: Record<string, any[]> = {};
-    filteredActivity.forEach((item: any) => {
-      const date = dayjs(item.timestamp);
+    const groups: Record<string, MergedAlert[]> = {};
+    filteredActivity.forEach((item) => {
+      const date = dayjs.unix(item.time);
       let groupKey = date.format('MMM D');
       if (date.isSame(dayjs(), 'day')) groupKey = 'Today';
       else if (date.isSame(dayjs().subtract(1, 'day'), 'day')) groupKey = 'Yesterday';
@@ -149,16 +148,16 @@ export default function Activity() {
               </tr>
             </thead>
             <tbody>
-              {filteredActivity.map((item: any) => (
+              {filteredActivity.map((item) => (
                 <tr key={item.id} className="border-b hover:bg-slate-50">
-                  <td className="px-4 py-2 whitespace-nowrap">{formatTime(item.timestamp)}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{formatTime(item.time)}</td>
                   <td className="px-4 py-2">{item.source}</td>
-                  <td className="px-4 py-2">{translateThreat(item.type).friendly}</td>
-                  <td className="px-4 py-2 font-mono text-xs">{item.src_ip} &rarr; {item.dst_ip || '-'}</td>
-                  <td className="px-4 py-2">{item.dst_port || '-'}</td>
+                  <td className="px-4 py-2">{item.title}</td>
+                  <td className="px-4 py-2 font-mono text-xs">{item.srcIp || item.processName || '-'} &rarr; {item.dstIp || '-'}</td>
+                  <td className="px-4 py-2">{item.dstPort || '-'}</td>
                   <td className="px-4 py-2">{item.confidence ? Math.round(item.confidence * 100) : '-'}</td>
-                  <td className="px-4 py-2">{riskToWord(item.risk_score || 0)}</td>
-                  <td className="px-4 py-2">{item.action || 'Logged'}</td>
+                  <td className="px-4 py-2">{riskToWord(item.riskScore || 0).label}</td>
+                  <td className="px-4 py-2">{item.actionLabel}</td>
                 </tr>
               ))}
             </tbody>
@@ -170,7 +169,7 @@ export default function Activity() {
             <div key={group} className="space-y-4">
               <h2 className="text-xl font-bold text-dark border-b pb-2">{group}</h2>
               <div className="aesthetic-icons space-y-3">
-                {items.map((item: any) => (
+                {items.map((item) => (
                   <AlertCard key={item.id} alert={item} />
                 ))}
               </div>

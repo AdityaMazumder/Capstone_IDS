@@ -1,37 +1,36 @@
 ﻿import React from 'react';
-import { Bell, ShieldCheck, Zap } from 'lucide-react';
+import { ShieldCheck, Zap } from 'lucide-react';
+import { ConnectionPill } from '../components/ConnectionPill';
+import { NotificationBell } from '../components/NotificationBell';
+import { useOverallStatus } from '../hooks/useOverallStatus';
+import type { ConnectionState, LiveNotification } from '../hooks/useLiveStream';
 
 interface TopBarProps {
   expertMode: boolean;
   setExpertMode: (v: boolean) => void;
-  liveState: any; // Placeholder for real state type
+  liveState: ConnectionState;
   unreadCount: number;
-  notifications: any[];
+  notifications: LiveNotification[];
   onMarkAllRead: () => void;
 }
 
-const ConnectionPill = () => (
-  <div className="text-xs bg-[#1A1A1A]/5 text-[#1A1A1A] font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5">
-    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-    Live
-  </div>
-);
-
-const NotificationBell = ({ count }: { count: number }) => (
-  <button className="relative p-2 text-[#1A1A1A] hover:bg-[#1A1A1A]/5 rounded-full transition-colors flex items-center justify-center">
-    <Bell className="w-6 h-6 stroke-[2.5px]" />
-    {count > 0 && (
-      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[var(--color-sage)]"></span>
-    )}
-  </button>
-);
+const STATUS_LABELS: Record<string, string> = {
+  protected: 'Protected',
+  handled: 'Protected',
+  action_needed: 'Needs attention',
+  offline: 'Offline',
+};
 
 export const TopBar: React.FC<TopBarProps> = ({
   expertMode,
   setExpertMode,
   liveState,
   unreadCount,
+  notifications,
+  onMarkAllRead,
 }) => {
+  const { status } = useOverallStatus();
+
   return (
     <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-2 sticky top-0 z-30">
       <header className="h-[72px] bg-[var(--color-sage)] rounded-[2rem] flex items-center justify-between px-4 sm:px-6 shadow-sm border border-[#1A1A1A]/5">
@@ -43,8 +42,8 @@ export const TopBar: React.FC<TopBarProps> = ({
           </div>
 
           <div className="hidden sm:flex items-center bg-[#1A1A1A]/5 p-1 rounded-full">
-            <div className="px-4 py-1 rounded-full text-sm font-bold text-[#1A1A1A] bg-white shadow-sm">
-              Protected
+            <div className={`px-4 py-1 rounded-full text-sm font-bold shadow-sm ${status === 'action_needed' ? 'bg-orange-500 text-white' : 'bg-white text-[#1A1A1A]'}`}>
+              {STATUS_LABELS[status] ?? 'Protected'}
             </div>
             <div className="px-4 py-1 rounded-full text-sm font-bold text-[#1A1A1A]/60">
               SentinelAI
@@ -56,18 +55,14 @@ export const TopBar: React.FC<TopBarProps> = ({
         <div className="flex items-center space-x-4 sm:space-x-6">
           
           <div className="hidden md:block">
-            <ConnectionPill />
+            <ConnectionPill state={liveState} />
           </div>
 
-          {/* Nav Links (Fake) */}
-          <div className="hidden lg:flex items-center space-x-6 mr-2 font-bold text-[#1A1A1A]">
-            <span className="cursor-pointer hover:opacity-70">Logs</span>
-            <span className="cursor-pointer hover:opacity-70">Rules</span>
-            <span className="cursor-pointer hover:opacity-70">Lab</span>
-          </div>
-
-          {/* Notification */}
-          <NotificationBell count={unreadCount} />
+          <NotificationBell
+            unreadCount={unreadCount}
+            notifications={notifications}
+            onMarkAllRead={onMarkAllRead}
+          />
           
           {/* Expert Toggle Styled like the 'Get started' button */}
           <button 

@@ -7,18 +7,18 @@ This document defines the interface specifications and contract protocols for pa
 ---
 
 ## 1. Member 1 Contract (Machine Learning Lead)
-**What Member 1 Provides (NIDS ML Package v2 — FROZEN):**
+**What Member 1 Provides (NIDS ML Package v3 — ACTIVE):**
 
-Canonical freeze write-up: `docs/ML_Package_v2.md`.
+Write-ups: `docs/ML_Package_v3.md` (active, CIC + lab merge), `docs/ML_Package_v2.md` (CIC-only, kept as rollback).
 
 | File | Role |
 |------|------|
-| `models/sentinel_xgb_v2.pkl` | 6-class XGBoost classifier |
-| `models/label_encoder_v2.pkl` | Maps class ids ↔ Benign / Botnet / DDoS / DoS / FTP-BruteForce / SSH-Bruteforce |
-| `models/feature_columns_v2.pkl` | Ordered list of **77** CIC feature names (**no `Dst Port`**) |
+| `models/sentinel_xgb_v3.pkl` | 7-class XGBoost classifier |
+| `models/label_encoder_v3.pkl` | Maps class ids ↔ Benign / Botnet / DDoS / DoS / FTP-BruteForce / PortScan / SSH-Bruteforce |
+| `models/feature_columns_v3.pkl` | Ordered list of **77** CIC feature names (**no `Dst Port`**, same contract as v2) |
 
-SOAR loads these via `soar/adapters/cic_xgb_adapter.py`.  
-Do **not** require `scaler.pkl` for this tree model. Dataset citation: **CSE-CIC-IDS2018**-style multiclass (`cic_multiclass_clean.csv`).
+SOAR loads these via `soar/adapters/cic_xgb_adapter.py`, with paths from `config/paths.py`.  
+Do **not** require `scaler.pkl` for this tree model. Dataset citation: **CSE-CIC-IDS2018**-style multiclass plus lab captures.
 
 **Hybrid (required for deploy):** pass `dst_port` into `adapter.predict(...)` (or set `FlowEvent.dst_port`) so DoS ↔ FTP/SSH swaps can be resolved. Port is **never** part of the 77-dim training vector.
 
@@ -92,95 +92,48 @@ When the FastAPI backend is running, Member 4 can explore and test all endpoints
 
 | Method | Endpoint | Description | Return Payload |
 |--------|----------|-------------|----------------|
+| `GET` | `/` | API health check | `{ system, status: "ONLINE", version, docs_url, websocket_feed }` |
 | `GET` | `/api/status` | System health & agent status matrix | `{ cpu_percent, memory_percent, uptime_seconds, agent_statuses: {...} }` |
 | `GET` | `/api/metrics` | High-level Dashboard KPI cards | `{ total_flows_analyzed, total_threats_detected, active_firewall_blocks, average_threat_risk, attack_distribution, top_offenders }` |
-| `GET` | `/api/incidents?limit=50&severity=CRITICAL` | Paginated incident list for tables | `{ count: 50, incidents: [...] }` |
-| `GET` | `/api/incidents/{incident_id}` | Full incident forensic & MITRE details | `{ incident_id, flow, detection, threat, risk, action_plan, llm_explanation }` |
-| `GET` | `/api/blocks` | List of active/released firewall rules | `{ count: 3, blocked_ips: [...] }` |
-| `POST` | `/api/blocks/unblock/{rule_id}` | Manual unblock button in React UI | `{ status: "SUCCESS", message: "..." }` |
-| `POST` | `/api/flows/ingest` | Submit custom flow (e.g. from sniffer or UI simulator) | `{ status: "PROCESSED", incident_id: "...", risk_score: 8.8, ... }` |
-| `POST` | `/api/reports/generate` | Trigger on-demand PDF report generation | `{ status: "GENERATED", filename: "...", download_url: "/api/reports/download/..." }` |
+| `GET` | `/api/incidents?limit=50&severity=CRITICAL` | Network incident list (flat DB rows) | `{ count, incidents: [...] }` |
+| `GET` | `/api/incidents/{incident_id}` | Full network incident (nested `Incident.to_dict()`) | `{ incident_id, timestamp, flow, detection, threat, risk, action_plan, firewall_rule, alert, llm_explanation, status }` |
+| `GET` | `/api/host/incidents?limit=50&classification=Stealer` | Host (HIDS) incident list (flat rows, full data in `raw_json`) | `{ count, host_incidents: [...] }` |
+| `GET` | `/api/blocks` | Active firewall rules | `{ count, blocked_ips: [...] }` (each has `rule_id`) |
+| `POST` | `/api/blocks/unblock/{rule_id}` | Manual unblock (use `rule_id`, not the IP) | `{ status: "SUCCESS", message: "..." }` |
+| `POST` | `/api/flows/ingest` | Submit a flow (sniffer, Demo panel) through the full pipeline | `{ status: "PROCESSED", incident_id, attack_type, risk_score, severity, action_taken, firewall_rule, llm_summary }` |
+| `POST` | `/api/host/events/ingest` | Submit a host event (see section 4) | `{ status: "PROCESSED", incident_id, classification, risk_score, severity, soar_action, action_status, mitre, remediation_notes, llm_summary }` |
+| `POST` | `/api/reports/generate` | Trigger on-demand PDF report generation | `{ status: "GENERATED", filename, download_url: "/api/reports/download/..." }` |
 | `GET` | `/api/reports/download/{filename}` | Download compiled PDF report | Binary PDF stream (`application/pdf`) |
-| `WS` | `/ws/live-stream` | Real-time bi-directional alert stream | JSON events (`NEW_INCIDENT`, `THREAT_ALERT`, `CONNECTED`) |
+| `WS` | `/ws/live-stream` | Real-time alert stream | JSON events, see below |
+
+All timestamps are **epoch seconds** (floats). The server runs in test mode, so firewall rule and process-kill
+statuses come back as `SIMULATED`.
 
 ---
 
-### React.js Frontend Code Snippets for Member 4:
+### WebSocket events (`ws://localhost:8000/ws/live-stream`)
 
-#### 1. Fetching Dashboard KPIs (React Hook):
-```javascript
-import React, { useState, useEffect } from 'react';
+Every message is `{ "event_type": ..., ... }`:
 
-export function useDashboardMetrics() {
-  const [metrics, setMetrics] = useState(null);
-  const [loading, setLoading] = useState(true);
+| `event_type` | When | Payload |
+|--------------|------|---------|
+| `CONNECTED` | Right after connect | `message`, `kpis` (same shape as `/api/metrics`) |
+| `THREAT_ALERT` | AlertAgent dispatched an alert (NIDS or HIDS) | `data`: `{ alert_id, timestamp, severity, title, message, src_ip, dst_ip, attack_type, risk_score, action_taken, channels, source: "NIDS" \| "HIDS", incident_id }` |
+| `NEW_INCIDENT` | A flow was ingested via `/api/flows/ingest` | `data`: full network incident (`Incident.to_dict()`) |
+| `NEW_HOST_INCIDENT` | A host event was ingested via `/api/host/events/ingest` | `data`: full host incident (`HostIncident.to_dict()`) |
+| `PONG` | Reply to a client `{"action": "PING"}` | — |
 
-  const fetchMetrics = async () => {
-    try {
-      const res = await fetch('http://localhost:8000/api/metrics');
-      const data = await res.json();
-      setMetrics(data);
-    } catch (err) {
-      console.error('Failed to load metrics:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+Use `THREAT_ALERT.data.incident_id` with `source` to link a notification to `/api/incidents/{id}` (NIDS) or the
+host incident (HIDS).
 
-  useEffect(() => {
-    fetchMetrics();
-    const interval = setInterval(fetchMetrics, 3000); // Polling fallback
-    return () => clearInterval(interval);
-  }, []);
+### Reference implementation
 
-  return { metrics, loading, refetch: fetchMetrics };
-}
-```
+The dashboard in `dashboard/` is the working consumer of this contract:
 
-#### 2. Real-Time Alert Stream (React WebSocket Hook):
-```javascript
-import { useEffect, useState } from 'react';
-
-export function useLiveThreatStream(onNewAlert) {
-  const [connected, setConnected] = useState(false);
-
-  useEffect(() => {
-    const ws = new WebSocket('ws://localhost:8000/ws/live-stream');
-
-    ws.onopen = () => {
-      console.log('Connected to SentinelAI Threat Stream');
-      setConnected(true);
-    };
-
-    ws.onmessage = (event) => {
-      const payload = JSON.parse(event.data);
-      console.log('Live Alert Received:', payload);
-      if (onNewAlert) {
-        onNewAlert(payload);
-      }
-    };
-
-    ws.onclose = () => setConnected(false);
-    ws.onerror = (err) => console.error('WebSocket error:', err);
-
-    return () => ws.close();
-  }, [onNewAlert]);
-
-  return { connected };
-}
-```
-
-#### 3. Manual Unblock Action Button in React:
-```javascript
-async function handleUnblock(ruleId) {
-  const res = await fetch(`http://localhost:8000/api/blocks/unblock/${ruleId}`, {
-    method: 'POST'
-  });
-  if (res.ok) {
-    alert(`Rule ${ruleId} successfully lifted!`);
-  }
-}
-```
+- `dashboard/src/api/client.ts`, `endpoints.ts`: REST calls (and mock mode).
+- `dashboard/src/hooks/useLiveStream.ts`: WebSocket with reconnect, notifications, and polling fallback.
+- `dashboard/src/hooks/useMergedActivity.ts`: merges network and host incidents into one alert model.
+- `dashboard/src/pages/AlertDetail.tsx`: reads both the nested network and the flat host incident shapes.
 
 ---
 

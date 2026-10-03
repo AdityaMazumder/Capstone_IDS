@@ -1,4 +1,4 @@
-﻿import React, { useContext, useState } from 'react';
+﻿import { useContext, useState } from 'react';
 import { ExpertContext } from '../App';
 import { ingestFlow, ingestHostEvent } from '../api/endpoints';
 import { toast } from 'sonner';
@@ -73,7 +73,15 @@ export function Demo() {
       icon: <EyeOff className="w-6 h-6" />,
       color: 'text-purple-600 dark:text-purple-400',
       bg: 'bg-purple-50 dark:bg-purple-900/20',
-      action: () => ingestHostEvent({ process_name: 'svc_update.exe', parent_name: 'powershell.exe', file_path: 'Chrome Login Data', label: 'Stealer' })
+      action: () => ingestHostEvent({
+        pid: 40000 + Math.floor(Math.random() * 20000),
+        process_name: 'svc_update.exe',
+        parent_name: 'powershell.exe',
+        file_path: 'C:\\Users\\User\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Login Data',
+        event_type: 'READ',
+        label: 'Stealer',
+        confidence: 0.97,
+      })
     },
     {
       id: 5,

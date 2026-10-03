@@ -1,6 +1,4 @@
-﻿import React from 'react';
-
-export interface RiskGaugeProps {
+﻿export interface RiskGaugeProps {
   score: number; // 0 to 10
 }
 

@@ -1,4 +1,4 @@
-﻿import React, { useContext } from 'react';
+﻿import { useContext } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ExpertContext } from '../App';
 import { getSystemStatus } from '../api/endpoints';

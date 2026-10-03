@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Shield, ShieldCheck, ShieldAlert, WifiOff } from 'lucide-react';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -13,7 +13,7 @@ export interface StatusBannerProps {
   onRetry?: () => void;
 }
 
-export function StatusBanner({ status, message, threatCount, onShowMe, onRetry }: StatusBannerProps) {
+export function StatusBanner({ status, message, onShowMe, onRetry }: StatusBannerProps) {
   const [lastChecked, setLastChecked] = useState(dayjs());
 
   useEffect(() => {

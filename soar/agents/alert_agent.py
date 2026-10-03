@@ -96,6 +96,7 @@ class AlertAgent(BaseAgent):
             action_taken=action,
             channels=["CONSOLE", "DASHBOARD"],
             source="NIDS",
+            incident_id=incident.incident_id,
         )
         toast = f"{attack} from {src_ip} (Risk {incident.risk.score}/10). Action: {action}"
         return self._fan_out(alert, toast)
@@ -124,6 +125,7 @@ class AlertAgent(BaseAgent):
             action_taken=action,
             channels=["CONSOLE", "DASHBOARD"],
             source="HIDS",
+            incident_id=incident.incident_id,
         )
         toast = f"{proc.process_name} touched {incident.file_event.file_type} (Risk {incident.risk_score}/10). Action: {action}"
         return self._fan_out(alert, toast)

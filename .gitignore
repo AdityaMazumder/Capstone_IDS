@@ -14,6 +14,8 @@ venv/
 
 # SOAR runtime artefacts
 soar/database/*.db
+soar/database/*.db-shm
+soar/database/*.db-wal
 soar/reports/*.pdf
 
 # HIDS sensor logs (raw output, can be huge and contains local paths)

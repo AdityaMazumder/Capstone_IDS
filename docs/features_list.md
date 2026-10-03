@@ -3,7 +3,8 @@
 **Source:** `models/feature_columns_v2.pkl`  
 **Model:** XGBoost (`models/sentinel_xgb_v2.pkl`), trained **without** `Dst Port`  
 **Package status:** **FROZEN** — see `docs/ML_Package_v2.md`  
-**Order matters:** inference must supply values in this exact index order.
+**Order matters:** inference must supply values in this exact index order.  
+**Active model:** v3 (`models/feature_columns_v3.pkl`) uses the same 77-column contract — see `docs/ML_Package_v3.md`.
 
 This list is the NIDS v2 → live pipeline contract. Any flow exporter output must be mapped into these names (or documented as missing).
 

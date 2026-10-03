@@ -3,215 +3,184 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { translateThreat, translateSeverity, isBenign } from '../lib/translate';
 
-type ConnectionState = 'connected' | 'reconnecting' | 'offline';
+export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
+
+export interface LiveNotification {
+  id: string;
+  incidentId?: string;
+  source: 'network' | 'computer';
+  title: string;
+  story: string;
+  severity: string;
+  time: number;
+  isNew: boolean;
+}
 
 interface LiveStreamOptions {
   onThreatAlert?: (data: any) => void;
   onNewIncident?: (data: any) => void;
   onNewHostIncident?: (data: any) => void;
-  soundEnabled?: boolean;
+}
+
+const LIVE_QUERY_KEYS = ['metrics', 'incidents', 'host-incidents', 'blocks'];
+
+export function alertLink(n: Pick<LiveNotification, 'source' | 'incidentId'>): string {
+  return n.incidentId ? `/activity/${n.source}/${n.incidentId}` : '/activity';
+}
+
+// The live stream hook runs above <BrowserRouter>, so navigate the way react-router listens for.
+function navigateTo(path: string) {
+  window.history.pushState({}, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
+function defaultWsUrl(): string {
+  const base = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+  return base.replace(/^http/, 'ws').replace(/\/$/, '') + '/ws/live-stream';
 }
 
 export function useLiveStream(options: LiveStreamOptions = {}) {
-  const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/live-stream';
+  const wsUrl = import.meta.env.VITE_WS_URL || defaultWsUrl();
   const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
   const queryClient = useQueryClient();
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectAttempt = useRef(0);
-  const pingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [state, setState] = useState<ConnectionState>(useMocks ? 'connected' : 'offline');
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
-  const addNotification = useCallback((alert: any) => {
-    setNotifications(prev => [alert, ...prev].slice(0, 20));
-    setUnreadCount(prev => prev + 1);
+  const [state, setState] = useState<ConnectionState>(useMocks ? 'connected' : 'reconnecting');
+  const [notifications, setNotifications] = useState<LiveNotification[]>([]);
+  const unreadCount = notifications.filter((n) => n.isNew).length;
 
-    // Update browser tab title
-    document.title = `(${unreadCount + 1}) SentinelAI`;
+  useEffect(() => {
+    document.title = unreadCount > 0 ? `(${unreadCount}) SentinelAI` : 'SentinelAI';
   }, [unreadCount]);
 
   const markAllRead = useCallback(() => {
-    setUnreadCount(0);
-    document.title = 'SentinelAI';
+    setNotifications((prev) => prev.map((n) => ({ ...n, isNew: false })));
   }, []);
 
-  const connect = useCallback(() => {
-    if (useMocks) {
-      setState('connected');
+  const refreshData = useCallback(() => {
+    for (const key of LIVE_QUERY_KEYS) queryClient.invalidateQueries({ queryKey: [key] });
+  }, [queryClient]);
+
+  const handleThreatAlert = useCallback((alert: any) => {
+    refreshData();
+    if (!alert || isBenign(alert.attack_type)) return;
+
+    const threat = translateThreat(alert.attack_type);
+    const severity = translateSeverity(alert.severity);
+    const notification: LiveNotification = {
+      id: alert.alert_id || String(Date.now()),
+      incidentId: alert.incident_id || undefined,
+      source: alert.source === 'HIDS' ? 'computer' : 'network',
+      title: threat.friendlyName,
+      story: threat.explanation,
+      severity: severity.label,
+      time: alert.timestamp || Date.now() / 1000,
+      isNew: true,
+    };
+
+    setNotifications((prev) => [notification, ...prev].slice(0, 20));
+
+    const sevRaw = String(alert.severity || '').toUpperCase();
+    if (sevRaw === 'CRITICAL' || sevRaw === 'HIGH') {
+      toast.error(threat.friendlyName, {
+        description: threat.explanation,
+        duration: sevRaw === 'CRITICAL' ? Infinity : 8000,
+        action: { label: 'View', onClick: () => navigateTo(alertLink(notification)) },
+      });
+    }
+  }, [refreshData]);
+
+  const handleMessageRef = useRef<(raw: string) => void>(() => {});
+  handleMessageRef.current = (raw: string) => {
+    let msg: any;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
       return;
     }
-
-    try {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        setState('connected');
-        reconnectAttempt.current = 0;
-        // Start ping interval
-        pingInterval.current = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ action: 'PING' }));
-          }
-        }, 25000);
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          switch (msg.event_type) {
-            case 'CONNECTED':
-              break;
-
-            case 'THREAT_ALERT': {
-              const alert = msg.data;
-              if (!isBenign(alert?.attack_type)) {
-                const threat = translateThreat(alert?.attack_type);
-                const severity = translateSeverity(alert?.severity);
-
-                // Refetch data
-                queryClient.invalidateQueries({ queryKey: ['metrics'] });
-                queryClient.invalidateQueries({ queryKey: ['incidents'] });
-                queryClient.invalidateQueries({ queryKey: ['blocks'] });
-                queryClient.invalidateQueries({ queryKey: ['host-incidents'] });
-
-                // Show toast for HIGH+
-                if (['CRITICAL', 'HIGH'].includes(alert?.severity?.toUpperCase())) {
-                  const isCritical = alert?.severity?.toUpperCase() === 'CRITICAL';
-                  toast.error(threat.friendly, {
-                    description: threat.explanation,
-                    duration: isCritical ? Infinity : 8000,
-                    action: {
-                      label: 'View',
-                      onClick: () => {
-                        const source = alert?.source === 'HIDS' ? 'computer' : 'network';
-                        window.location.href = `/activity/${source}/${alert?.alert_id}`;
-                      },
-                    },
-                  });
-                }
-
-                addNotification({
-                  id: alert?.alert_id || Date.now(),
-                  title: threat.friendly,
-                  severity: severity.label,
-                  time: Date.now() / 1000,
-                  source: alert?.source === 'HIDS' ? 'computer' : 'network',
-                  alertData: alert,
-                });
-              }
-              options.onThreatAlert?.(alert);
-              break;
-            }
-
-            case 'NEW_INCIDENT':
-              queryClient.invalidateQueries({ queryKey: ['incidents'] });
-              queryClient.invalidateQueries({ queryKey: ['metrics'] });
-              options.onNewIncident?.(msg.data);
-              break;
-
-            case 'NEW_HOST_INCIDENT':
-              queryClient.invalidateQueries({ queryKey: ['host-incidents'] });
-              queryClient.invalidateQueries({ queryKey: ['metrics'] });
-              options.onNewHostIncident?.(msg.data);
-              break;
-
-            case 'PONG':
-              break;
-          }
-        } catch {
-          // ignore parse errors
-        }
-      };
-
-      ws.onclose = () => {
-        setState('reconnecting');
-        cleanup();
-        scheduleReconnect();
-      };
-
-      ws.onerror = () => {
-        ws.close();
-      };
-    } catch {
-      setState('offline');
-      scheduleReconnect();
+    switch (msg.event_type) {
+      case 'THREAT_ALERT':
+        handleThreatAlert(msg.data);
+        optionsRef.current.onThreatAlert?.(msg.data);
+        break;
+      case 'NEW_INCIDENT':
+        refreshData();
+        optionsRef.current.onNewIncident?.(msg.data);
+        break;
+      case 'NEW_HOST_INCIDENT':
+        refreshData();
+        optionsRef.current.onNewHostIncident?.(msg.data);
+        break;
     }
-  }, [wsUrl, useMocks, queryClient, options, addNotification]);
-
-  const cleanup = useCallback(() => {
-    if (pingInterval.current) {
-      clearInterval(pingInterval.current);
-      pingInterval.current = null;
-    }
-  }, []);
-
-  const scheduleReconnect = useCallback(() => {
-    // Backoff: 1s, 2s, 4s, 8s, max 15s
-    const delay = Math.min(1000 * Math.pow(2, reconnectAttempt.current), 15000);
-    reconnectAttempt.current++;
-    reconnectTimer.current = setTimeout(() => {
-      connect();
-    }, delay);
-  }, [connect]);
+  };
 
   useEffect(() => {
+    if (useMocks) return;
+
+    let disposed = false;
+    let ws: WebSocket | null = null;
+    let pingTimer: ReturnType<typeof setInterval> | undefined;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
+
+    const connect = () => {
+      if (disposed) return;
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        attempt = 0;
+        setState('connected');
+        refreshData();
+        pingTimer = setInterval(() => {
+          if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ action: 'PING' }));
+        }, 25000);
+      };
+      ws.onmessage = (event) => handleMessageRef.current(event.data);
+      ws.onerror = () => ws?.close();
+      ws.onclose = () => {
+        clearInterval(pingTimer);
+        if (disposed) return;
+        setState(attempt >= 3 ? 'offline' : 'reconnecting');
+        const delay = Math.min(1000 * 2 ** attempt, 15000);
+        attempt++;
+        reconnectTimer = setTimeout(connect, delay);
+      };
+    };
+
     connect();
     return () => {
-      cleanup();
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-      if (wsRef.current) wsRef.current.close();
+      disposed = true;
+      clearInterval(pingTimer);
+      clearTimeout(reconnectTimer);
+      ws?.close();
     };
-  }, []);
+  }, [wsUrl, useMocks, refreshData]);
 
-  // Mock mode: emit fake alerts every 15 seconds
+  // Mock mode: emit a fake alert every 15 seconds so the bell and toasts can be previewed.
   useEffect(() => {
     if (!useMocks) return;
     const mockTypes = ['DDoS', 'SSH-Bruteforce', 'PortScan', 'Stealer', 'Botnet'];
     const mockSeverities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
     const interval = setInterval(() => {
       const type = mockTypes[Math.floor(Math.random() * mockTypes.length)];
-      const severity = mockSeverities[Math.floor(Math.random() * mockSeverities.length)];
-      const alert = {
+      handleThreatAlert({
         alert_id: `MOCK-${Date.now()}`,
         timestamp: Date.now() / 1000,
-        severity,
-        title: type,
-        message: `Mock ${type} alert`,
-        src_ip: '45.33.32.156',
-        dst_ip: '192.168.1.10',
+        severity: mockSeverities[Math.floor(Math.random() * mockSeverities.length)],
         attack_type: type,
-        risk_score: 5 + Math.random() * 5,
-        action_taken: 'TEMP_BAN_IP',
         source: type === 'Stealer' ? 'HIDS' : 'NIDS',
-      };
-      const threat = translateThreat(type);
-      const sev = translateSeverity(severity);
-      addNotification({
-        id: alert.alert_id,
-        title: threat.friendly,
-        severity: sev.label,
-        time: alert.timestamp,
-        source: alert.source === 'HIDS' ? 'computer' : 'network',
-        alertData: alert,
       });
     }, 15000);
     return () => clearInterval(interval);
-  }, [useMocks, addNotification]);
+  }, [useMocks, handleThreatAlert]);
 
-  // Polling fallback when offline
+  // Polling fallback while the live connection is down.
   useEffect(() => {
-    if (state !== 'offline' && state !== 'reconnecting') return;
-    const interval = setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: ['metrics'] });
-      queryClient.invalidateQueries({ queryKey: ['incidents'] });
-      queryClient.invalidateQueries({ queryKey: ['host-incidents'] });
-      queryClient.invalidateQueries({ queryKey: ['blocks'] });
-    }, 5000);
+    if (state === 'connected') return;
+    const interval = setInterval(refreshData, 5000);
     return () => clearInterval(interval);
-  }, [state, queryClient]);
+  }, [state, refreshData]);
 
   return { state, unreadCount, notifications, markAllRead };
 }

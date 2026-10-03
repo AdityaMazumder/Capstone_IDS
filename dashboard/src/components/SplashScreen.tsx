@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 
 export function SplashScreen({ onFinish }: { onFinish: () => void }) {
   const [isFading, setIsFading] = useState(false);

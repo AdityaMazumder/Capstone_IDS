@@ -3,12 +3,20 @@
 > **Role: Member 3 — Multi-Agent Orchestrator & SOAR Lead**  
 > Package path: `Capstone/soar/` (renamed from `Multi-Model Architecture/`).
 
-## NIDS model integration (v2 — frozen)
+## NIDS model integration (v3 — active)
 
-Detection uses `adapters/cic_xgb_adapter.py` → Capstone `models/sentinel_xgb_v2.pkl`  
-(77 CIC features, `label_encoder_v2.pkl`, **no scaler**). Dataset: **CSE-CIC-IDS2018**-style multiclass + hybrid `dst_port` override.
+Detection uses `adapters/cic_xgb_adapter.py` → Capstone `models/sentinel_xgb_v3.pkl` via `config/paths.py`
+(77 CIC features, `label_encoder_v3.pkl`, `feature_columns_v3.pkl`, **no scaler**).
+Classes: Benign, Botnet, DDoS, DoS, FTP-BruteForce, PortScan, SSH-Bruteforce. Hybrid `dst_port` override and
+the OOD policy (`rules/ood_policy.py`) run after the model.
 
-Canonical freeze note: `../docs/ML_Package_v2.md`.
+Package notes: `../docs/ML_Package_v3.md` (active), `../docs/ML_Package_v2.md` (CIC-only rollback).
+
+## HIDS integration
+
+`agents/host_agent.py` takes host events (process + sensitive file access, optional Isolation Forest label from
+`hids/`), classifies them, maps MITRE (T1555.003 browser credentials, T1539 session cookies, T1005 local data), scores risk
+and decides `TERMINATE_PROCESS` / `ALERT_ONLY` / `LOG_ONLY`. Process termination has its own dry-run switch (`dry_run_host_response`, default `True`).
 
 
 ---
@@ -65,18 +73,24 @@ Canonical freeze note: `../docs/ML_Package_v2.md`.
 ## 2. Directory Structure
 
 ```
-sentinel-ai/
+soar/
+│
+├── adapters/
+│   └── cic_xgb_adapter.py    # Loads the active XGBoost package (v3) + hybrid dst_port override
+│
+├── api/
+│   └── server.py             # FastAPI REST + WebSocket backend for the React dashboard
 │
 ├── core/
 │   ├── event_bus.py          # In-memory publish/subscribe event dispatcher with error isolation
 │   ├── schemas.py            # Strongly typed data models (FlowEvent, Incident, ActionPlan, etc.)
-│   ├── orchestrator.py       # Master runner coordinating all 11 agents & background workers
+│   ├── orchestrator.py       # Master runner coordinating all agents (process_flow / process_host_event)
 │   └── __init__.py
 │
 ├── agents/
 │   ├── base_agent.py         # Abstract base class for all agents with lifecycle & telemetry
 │   ├── packet_agent.py       # Validates and cleans Member 2's incoming flow telemetry
-│   ├── detection_agent.py    # Loads Member 1's model.pkl + scaler.pkl (with heuristic fallback)
+│   ├── detection_agent.py    # Runs the XGBoost adapter (with heuristic fallback)
 │   ├── risk_agent.py         # Dynamic risk scoring (1-10 scale) using velocity & asset sensitivity
 │   ├── threat_agent.py       # Attack signature analysis & MITRE ATT&CK mapping (T1046, T1498, etc.)
 │   ├── decision_agent.py     # Policy evaluation, whitelist checks & SOAR response planning
@@ -85,38 +99,41 @@ sentinel-ai/
 │   ├── logging_agent.py      # SQLite persistence into database/sentinel.db
 │   ├── report_agent.py       # Automated PDF incident & shift summary reports using ReportLab
 │   ├── llm_agent.py          # GenAI SOC analyst plain-English briefings (Gemini / Ollama / Expert System)
+│   ├── host_agent.py         # HIDS: classify host events, MITRE map, risk, process termination (dry-run)
 │   └── __init__.py
 │
 ├── rules/
 │   ├── policies.yaml         # Configurable security rules, thresholds, cooldowns, and whitelists
 │   ├── policy_engine.py      # Evaluates rules against threats and computes sensitivities
+│   ├── ood_policy.py         # Out-of-distribution override on top of the ML label
 │   └── __init__.py
 │
 ├── database/
-│   ├── schema.sql            # SQLite DDL tables (incidents, blocked_ips, system_metrics, audit_logs)
+│   ├── schema.sql            # SQLite DDL (incidents, host_incidents, blocked_ips, system_metrics, audit_logs)
 │   ├── db_manager.py         # Thread-safe SQLite persistence and analytical queries for dashboard
 │   └── __init__.py
 │
-├── models/                   # Capstone root models/ (not this folder) — Member 1 v2 artefacts
-│                             # sentinel_xgb_v2.pkl, label_encoder_v2.pkl, feature_columns_v2.pkl
-│                             # Loaded via adapters/cic_xgb_adapter.py — no scaler.pkl
-│
 ├── contracts/
-│   └── teammate_contracts.md # Standardized API specifications for Members 1, 2, and 4
+│   └── teammate_contracts.md # Model, sensor, host-event and dashboard API contracts
 │
 ├── tests/
-│   ├── mock_traffic.py       # High-fidelity synthetic cyberattack flow generator
-│   └── test_agents.py        # Comprehensive 12-test unit and integration suite
+│   ├── mock_traffic.py       # Synthetic cyberattack flow generator
+│   └── test_host_agent.py    # HostAgent / host pipeline tests
 │
 ├── demo_runner.py            # Golden Demo 6-stage presentation script
-├── main.py                   # Master CLI entrypoint
-├── requirements.txt          # Python dependencies
+├── demo_real_model.py        # Real XGBoost model on CSV rows through the full pipeline
+├── lab_csv_to_soar.py        # Replay lab-captured flow CSVs into SOAR
+├── main.py                   # Master CLI entrypoint (server / demo / simulate / report / status)
+├── requirements.txt          # Points at the root requirements.txt
 └── README.md
 ```
 
+Models are loaded from the Capstone root `models/` folder (not inside `soar/`). The SQLite database is created at
+`database/sentinel.db` on first run (gitignored).
+
 ---
 
-## 3. Specifications of the 11 Specialist Agents
+## 3. Specifications of the Specialist Agents
 
 | # | Agent Name | File | Role & Capabilities |
 |---|------------|------|---------------------|
@@ -131,6 +148,9 @@ sentinel-ai/
 | 9 | **LoggingAgent** | `agents/logging_agent.py` | Thread-safe SQLite persistence for incidents, blocks, telemetry, and audit compliance. |
 | 10 | **ReportAgent** | `agents/report_agent.py` | Generates professional executive & forensic PDF reports via ReportLab. |
 | 11 | **LLMAgent** | `agents/llm_agent.py` | GenAI SOC analyst briefings via Google Gemini API, local Ollama, or built-in offline expert system. |
+| 12 | **HostAgent** | `agents/host_agent.py` | HIDS: classifies host events (heuristics or Isolation Forest label), MITRE mapping, risk, and verified process termination (dry-run by default). |
+
+`AlertAgent` puts every NIDS/HIDS alert on the dashboard queue with its `incident_id`, so the dashboard can link a live pop-up straight to the incident.
 
 ---
 
@@ -156,25 +176,34 @@ $$\text{Risk Score} = (\text{Base Attack Weight} \times \text{Confidence}) + \te
 ## 5. Quickstart & Installation
 
 ### Step 1: Install Dependencies
+From the Capstone root (one list for the whole project, includes FastAPI and uvicorn):
 ```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 ```
 
-### Step 2: Run Full Unit & Integration Test Suite
+### Step 2: Run the Tests
+From the Capstone root:
 ```powershell
-python -m unittest discover -s tests -p "test_*.py" -v
+python -m pytest soar/tests -q
 ```
 
 ---
 
 ## 6. How to Run the System
 
-### 1. Launch the FastAPI Backend Server (For Member 4's React Frontend)
+All commands below run from inside `soar/`.
+
+### 1. Launch the FastAPI Backend Server (for the React dashboard)
 ```powershell
-python main.py server --host 127.0.0.1 --port 8000 --reload
+python main.py server                       # defaults: --host 127.0.0.1 --port 8000
+python main.py server --reload              # auto-reload while editing
 ```
 - **Interactive Swagger REST API Docs:** `http://localhost:8000/docs`
 - **Real-Time WebSocket Feed for React:** `ws://localhost:8000/ws/live-stream`
+- The server always starts in **test mode**: firewall blocks and process kills are simulated, desktop toasts off.
+- Then start the dashboard (`dashboard/README.md`). Full endpoint list: `contracts/teammate_contracts.md`.
 
 ### 2. Launch the Golden Demo (Evaluation Presentation Mode)
 ```powershell
@@ -203,7 +232,7 @@ python main.py status
 ## 7. Golden Demo Script (For Final Project Defense)
 
 When presenting to evaluators, execute `python demo_runner.py`:
-1. **Stage 1 (System Boot):** Demonstrates all 11 agents initializing, SQLite connecting, and policies loading.
+1. **Stage 1 (System Boot):** Demonstrates all agents initializing, SQLite connecting, and policies loading.
 2. **Stage 2 (Normal Baseline):** Ingests normal HTTPS flows $\rightarrow$ Classified as `BENIGN` $\rightarrow$ Risk `0.2/10` $\rightarrow$ LoggingAgent logs quietly without alerts.
 3. **Stage 3 (Simulated Attack):** Simulates an authorized `nmap -sS` SYN sweep targeting 10 ports from `192.168.1.50`.
 4. **Stage 4 (Real-Time Choreography):**

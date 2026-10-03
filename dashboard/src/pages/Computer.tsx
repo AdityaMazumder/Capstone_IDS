@@ -1,28 +1,25 @@
-﻿import React, { useContext } from 'react';
-import { useQuery } from '@tanstack/react-query';
+﻿import { useQuery } from '@tanstack/react-query';
 import { Shield, Lock, KeyRound, Key, CreditCard, Wallet, AlertTriangle } from 'lucide-react';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
-import { ExpertContext } from '../App';
 import { Skeleton, ErrorState, AlertCard } from '../components/index';
 import { getHostIncidents } from '../api/endpoints';
-import {} from '../components/index';
+import { hostIncidentToAlert } from '../hooks/useMergedActivity';
 
 dayjs.extend(relativeTime);
 
 export default function Computer() {
-  const { expert } = useContext(ExpertContext);
-
-  const { data: incidents = [], isLoading, error } = useQuery({
-    queryKey: ['host-incidents'],
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['host-incidents', 100],
     queryFn: () => getHostIncidents(100),
   });
 
   if (isLoading) return <div className="p-6"><Skeleton className="h-64 w-full" /></div>;
   if (error) return <div className="p-6"><ErrorState message="Could not load host incidents." /></div>;
 
-  const stoppedCount = incidents.filter((i: any) => i.soar_action === 'TERMINATE_PROCESS').length;
+  const incidents = data?.host_incidents ?? [];
+  const stoppedCount = incidents.filter((i) => i.soar_action === 'TERMINATE_PROCESS').length;
 
   const protectedItems = [
     { id: 'passwords', name: 'Saved browser passwords', icon: Lock, status: 'safe', lastAccessed: null },
@@ -31,13 +28,6 @@ export default function Computer() {
     { id: 'cards', name: 'Autofill data and saved cards', icon: CreditCard, status: 'safe', lastAccessed: null },
     { id: 'wallet', name: 'Crypto wallet', icon: Wallet, status: 'safe', lastAccessed: null },
   ];
-
-  // Map incidents to protected items to update their status (mock logic based on file path/type if needed, or assume safe for demo)
-  // For simplicity, keeping all 'safe' unless real logic is provided.
-  incidents.forEach((inc: any) => {
-    // If you had a way to map inc.file_path to a protected item, you would update it here
-    // e.g. if inc affects passwords, set protectedItems[0].status = 'warn'
-  });
 
   return (
     <div className="aesthetic-icons max-w-5xl mx-auto p-4 md:p-6 space-y-8">
@@ -93,8 +83,8 @@ export default function Computer() {
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
-            {incidents.map((incident: any) => (
-              <AlertCard key={incident.id} incident={incident} source="computer" expert={expert} />
+            {incidents.map((incident) => (
+              <AlertCard key={incident.incident_id} alert={hostIncidentToAlert(incident)} />
             ))}
           </div>
         )}
