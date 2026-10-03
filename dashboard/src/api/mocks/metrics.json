@@ -1,0 +1,1 @@
+{"total_flows_analyzed":12500,"total_threats_detected":42,"active_firewall_blocks":0,"average_threat_risk":7.2,"attack_distribution":{"DDoS":12,"PortScan":15,"SSH-Bruteforce":10,"Stealer":5},"top_offenders":[{"src_ip":"45.33.1.2","incident_count":8,"max_risk_score":9.1,"attack_types":["SSH-Bruteforce"],"last_seen":1791025668}]}
