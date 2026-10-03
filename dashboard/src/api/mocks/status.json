@@ -1,1 +1,17 @@
-{"timestamp":1791025768,"total_flows":12500,"total_threats":42,"total_blocked_ips":3,"total_alerts":45,"active_firewall_rules":3,"cpu_percent":15,"memory_percent":45,"uptime_seconds":36000,"agent_statuses":{"detection_agent":"PROCESSING","threat_agent":"IDLE","risk_agent":"ERROR","decision_agent":"IDLE","firewall_agent":"IDLE","host_agent":"IDLE"}}
+{
+  "timestamp": 1727800500,
+  "total_flows": 24837,
+  "total_threats": 47,
+  "total_blocked_ips": 3,
+  "total_alerts": 120,
+  "active_firewall_rules": 3,
+  "cpu_percent": 15.4,
+  "memory_percent": 42.1,
+  "uptime_seconds": 86400,
+  "agent_statuses": {
+    "network_sensor": "RUNNING",
+    "host_agent_01": "RUNNING",
+    "host_agent_02": "ERROR",
+    "ml_engine": "RUNNING"
+  }
+}

@@ -1,21 +1,33 @@
-# SentinelAI Dashboard (Phase 6)
+# SentinelAI Dashboard
 
-The NIDS live inference and SOAR backend are now stable and ready for integration. 
+This is the front-end dashboard for the SentinelAI platform.
 
-Please refer to the **SentinelAI Dashboard: Build Brief** for full instructions on building out the React + Vite + Tailwind + Recharts UI against the `soar/api/server.py` REST and WebSocket endpoints.
+## Quick Start
 
-### Tech Stack
-- React 18 + Vite
-- TypeScript
-- Tailwind CSS
+1. Start the SOAR backend API:
+```powershell
+cd C:\Capstone\soar
+pip install -r requirements.txt
+python main.py server
+```
+
+2. Start the dashboard dev server:
+```powershell
+cd C:\Capstone\dashboard
+npm install
+npm run dev
+```
+
+## Features
+
+- **Real-time Updates**: Live stream connected via WebSocket to the SOAR backend.
+- **Test Mode Supported**: When the backend runs in test mode, the UI reflects actions as "Simulated".
+- **Mock Mode**: Run entirely without a backend by setting `VITE_USE_MOCKS=true` in `.env`.
+- **Expert vs Simple View**: Toggle between plain English for normal users and raw technical logs for analysts.
+
+## Tech Stack
+- React 18, Vite, TypeScript
+- Tailwind CSS v4
+- TanStack Query
 - Recharts
-- React Router v6
-- TanStack Query (react-query)
-- lucide-react
-- sonner
-- dayjs
-
-### Getting Started
-1. Run `npm install` inside the `dashboard` directory.
-2. Run `npm run dev` to start the frontend server.
-3. Configure your backend URL and test mode settings in `dashboard/.env`.
+- dayjs & lucide-react

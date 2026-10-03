@@ -1,46 +1,105 @@
+﻿import React, { useContext } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { endpoints } from '../api/endpoints';
+import { Shield, Lock, KeyRound, Key, CreditCard, Wallet, AlertTriangle } from 'lucide-react';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+
+import { ExpertContext } from '../App';
+import { Skeleton, ErrorState, AlertCard } from '../components/index';
+import { getHostIncidents } from '../api/endpoints';
+import {} from '../components/index';
+
+dayjs.extend(relativeTime);
 
 export default function Computer() {
-  const { data, isLoading } = useQuery({
+  const { expert } = useContext(ExpertContext);
+
+  const { data: incidents = [], isLoading, error } = useQuery({
     queryKey: ['host-incidents'],
-    queryFn: endpoints.getHostIncidents,
-    refetchInterval: 15000,
+    queryFn: () => getHostIncidents(100),
+  });
+
+  if (isLoading) return <div className="p-6"><Skeleton className="h-64 w-full" /></div>;
+  if (error) return <div className="p-6"><ErrorState message="Could not load host incidents." /></div>;
+
+  const stoppedCount = incidents.filter((i: any) => i.soar_action === 'TERMINATE_PROCESS').length;
+
+  const protectedItems = [
+    { id: 'passwords', name: 'Saved browser passwords', icon: Lock, status: 'safe', lastAccessed: null },
+    { id: 'cookies', name: 'Login sessions/cookies', icon: KeyRound, status: 'safe', lastAccessed: null },
+    { id: 'masterkey', name: 'Browser master key', icon: Key, status: 'safe', lastAccessed: null },
+    { id: 'cards', name: 'Autofill data and saved cards', icon: CreditCard, status: 'safe', lastAccessed: null },
+    { id: 'wallet', name: 'Crypto wallet', icon: Wallet, status: 'safe', lastAccessed: null },
+  ];
+
+  // Map incidents to protected items to update their status (mock logic based on file path/type if needed, or assume safe for demo)
+  // For simplicity, keeping all 'safe' unless real logic is provided.
+  incidents.forEach((inc: any) => {
+    // If you had a way to map inc.file_path to a protected item, you would update it here
+    // e.g. if inc affects passwords, set protectedItems[0].status = 'warn'
   });
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold">Computer Protection</h1>
-      <p className="text-slate-600 dark:text-slate-400">
-        SentinelAI watches for programs that secretly open your saved passwords, login cookies or crypto wallet.
-      </p>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* Protected items mock grid */}
-        {['Your saved browser passwords', 'Your login sessions', 'Your autofill data'].map(item => (
-          <div key={item} className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center text-center">
-             <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-3">
-               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-             </div>
-             <h3 className="font-medium text-sm">{item}</h3>
-             <span className="text-emerald-600 text-sm font-semibold mt-1">Guarded</span>
+    <div className="aesthetic-icons max-w-5xl mx-auto p-4 md:p-6 space-y-8">
+      <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-100 rounded-2xl p-6 md:p-8">
+        <div className="flex items-start gap-4">
+          <div className="bg-[var(--color-sage)] p-4 rounded-[1.5rem] shrink-0">
+            <Shield className="w-8 h-8 text-emerald-600" />
           </div>
-        ))}
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-800 mb-2">Computer Protection</h1>
+            <p className="text-dark max-w-3xl leading-relaxed">
+              SentinelAI watches for programs that secretly open your saved passwords, login cookies or crypto wallet. That's how password-stealing malware works.
+            </p>
+            <div className="mt-4 inline-flex items-center gap-2 bg-white px-4 py-2 rounded-lg text-sm font-medium text-dark shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              Programs stopped: {stoppedCount}
+            </div>
+          </div>
+        </div>
       </div>
 
-      <h2 className="text-lg font-bold mt-8">Recent Computer Threats</h2>
-      {isLoading ? <div>Loading...</div> : (
-        <div className="space-y-3">
-           {data?.host_incidents?.length ? data.host_incidents.map((inc: any) => (
-             <div key={inc.incident_id} className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-               <p className="font-bold">{inc.process_name}</p>
-               <p className="text-sm text-slate-500">{inc.file_type || inc.file_path}</p>
-             </div>
-           )) : (
-             <p className="text-slate-500">No computer threats detected.</p>
-           )}
+      <div>
+        <h2 className="text-lg font-medium text-gray-800 mb-4">Protected Items</h2>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {protectedItems.map((item) => (
+            <div key={item.id} className="bg-[var(--color-sage)] p-6 rounded-[2rem] flex items-start gap-4">
+              <div className={`p-2.5 rounded-lg shrink-0 ${item.status === 'safe' ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>
+                <item.icon className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="font-medium text-gray-800">{item.name}</p>
+                {item.status === 'safe' ? (
+                  <p className="text-sm text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                    <Shield className="w-3.5 h-3.5" /> Guarded
+                  </p>
+                ) : (
+                  <p className="text-sm text-orange-600 mt-1 flex items-start gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                    Accessed by an unknown program {dayjs(item.lastAccessed).fromNow()}
+                  </p>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
-      )}
+      </div>
+
+      <div>
+        <h2 className="text-lg font-medium text-gray-800 mb-4">Recent Computer Activity</h2>
+        {incidents.length === 0 ? (
+          <div className="bg-[var(--color-sage)] rounded-[2rem] p-8 text-center text-dark">
+            No recent incidents found.
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {incidents.map((incident: any) => (
+              <AlertCard key={incident.id} incident={incident} source="computer" expert={expert} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+

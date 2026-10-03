@@ -1,0 +1,12 @@
+{
+  "incident_id": "INC-001",
+  "timestamp": 1727800200,
+  "status": "RESOLVED",
+  "flow": { "src_ip": "45.33.32.156", "dst_ip": "192.168.1.10", "src_port": 54120, "dst_port": 22, "protocol": 6, "flow_duration": 0.15 },
+  "detection": { "attack_type": "SSH-Bruteforce", "confidence": 0.94, "probabilities": { "SSH-Bruteforce": 0.94, "Benign": 0.04, "PortScan": 0.02 }, "ml_attack_type": "SSH-Bruteforce", "policy_applied": "brute_force_override", "policy_reason": "Rapid repeated connection attempts from single source", "inference_time_ms": 12 },
+  "threat": { "indicators": ["Rapid repeated SSH connections", "Failed auth attempts", "Single source IP"], "anomaly_explanation": "Abnormally high connection frequency to SSH service", "mitre_technique_id": "T1110.001", "mitre_technique_name": "Brute Force: Password Guessing", "mitre_tactic": "Credential Access" },
+  "risk": { "score": 8.7, "severity": "HIGH", "rationale": "Critical service targeted with high-confidence attack", "frequency_count_60s": 42 },
+  "action_plan": { "action_type": "TEMP_BAN_IP", "target_ip": "45.33.32.156", "ban_duration_seconds": 86400, "priority": "HIGH", "rationale": "Block brute force source" },
+  "firewall_rule": { "rule_id": "FW-001", "target_ip": "45.33.32.156", "status": "SIMULATED", "expires_at": 1727886600, "command_executed": "netsh advfirewall firewall add rule name=SentinelAI_FW-001 dir=in action=block remoteip=45.33.32.156" },
+  "llm_explanation": { "summary": "An outside computer tried to guess your remote login password 42 times in one minute.", "technical_analysis": "SSH brute-force attack from 45.33.32.156 targeting port 22 with 42 rapid connection attempts within a 60-second window.", "mitre_context": "T1110.001 Password Guessing is an initial access technique.", "soc_recommendations": ["Monitor for successful logins from this IP", "Review SSH access logs", "Consider changing SSH port", "Enable key-based authentication"], "provider": "gemini" }
+}

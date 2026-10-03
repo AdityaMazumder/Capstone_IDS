@@ -1,0 +1,12 @@
+{
+  "incident_id": "INC-002",
+  "timestamp": 1727800100,
+  "status": "UNRESOLVED",
+  "flow": { "src_ip": "185.220.101.34", "dst_ip": "192.168.1.11", "src_port": 40312, "dst_port": 80, "protocol": 6, "flow_duration": 0.05 },
+  "detection": { "attack_type": "DDoS", "confidence": 0.98, "probabilities": { "DDoS": 0.98, "Benign": 0.01, "PortScan": 0.01 }, "ml_attack_type": "DDoS", "policy_applied": "ddos_protection", "policy_reason": "High volume of packets targeting single destination", "inference_time_ms": 15 },
+  "threat": { "indicators": ["Massive volume of HTTP GET requests", "Single source IP"], "anomaly_explanation": "Extremely high packet rate to HTTP service", "mitre_technique_id": "T1498", "mitre_technique_name": "Network Denial of Service", "mitre_tactic": "Impact" },
+  "risk": { "score": 9.2, "severity": "CRITICAL", "rationale": "High volume attack likely to cause service disruption", "frequency_count_60s": 5000 },
+  "action_plan": { "action_type": "TEMP_BAN_IP", "target_ip": "185.220.101.34", "ban_duration_seconds": 86400, "priority": "CRITICAL", "rationale": "Block DDoS source" },
+  "firewall_rule": { "rule_id": "FW-002", "target_ip": "185.220.101.34", "status": "ACTIVE", "expires_at": 1727886500, "command_executed": "netsh advfirewall firewall add rule name=SentinelAI_FW-002 dir=in action=block remoteip=185.220.101.34" },
+  "llm_explanation": null
+}
