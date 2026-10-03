@@ -19,6 +19,15 @@ soar/reports/*.pdf
 # HIDS sensor logs (raw output, can be huge and contains local paths)
 hids/logs/
 
+# HIDS stealer-simulator manifests (contain local temp/credential paths)
+hids/dataset/manifests/
+
+# Built HIDS training tables (regenerated from local logs)
+hids/dataset/*.csv
+
+# Test cache
+.pytest_cache/
+
 # OS / IDE
 .DS_Store
 Thumbs.db
