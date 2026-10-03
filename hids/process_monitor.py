@@ -299,11 +299,17 @@ class DailyCsvWriter:
 # Main loop
 # -------------------------------------------------------------
 
+def _emit(on_rows: Optional[Callable[[List[Dict[str, Any]]], None]], rows: List[Dict[str, Any]]) -> None:
+    if on_rows and rows:
+        on_rows(rows)
+
+
 def run(
     interval: float = INTERVAL,
     stats_every: float = STATS_EVERY,
     log_dir: str = LOG_DIR,
     duration: float = 0.0,
+    on_rows: Optional[Callable[[List[Dict[str, Any]]], None]] = None,
 ) -> None:
     tracker = ProcessTracker(stats_every=stats_every, exclude_pids={os.getpid()})
     out = DailyCsvWriter(log_dir)
@@ -316,7 +322,9 @@ def run(
         while True:
             samples=scan()
             now = time.time()
-            out.write(tracker.update(samples, now, read_static), now)
+            rows = tracker.update(samples, now, read_static)
+            out.write(rows, now)
+            _emit(on_rows, rows)
             scans += 1
             if duration and time.monotonic() - start >= duration:
                 break
@@ -331,7 +339,9 @@ def run(
         pass
     finally:
         now = time.time()
-        out.write(tracker.finish(now), now)
+        rows = tracker.finish(now)
+        out.write(rows, now)
+        _emit(on_rows, rows)
         out.close()
         print(f"\nStopped after {scans} scans ({overruns} took longer than {interval}s). Log: {out.path}")
 
@@ -342,8 +352,24 @@ def main() -> None:
     parser.add_argument("--stats-every", type=float, default=STATS_EVERY, help="Seconds between STATS rows (default 30)")
     parser.add_argument("--log-dir", default=LOG_DIR, help="Output folder (default hids/logs)")
     parser.add_argument("--duration", type=float, default=0.0, help="Stop after N seconds (0 = run until Ctrl+C)")
+    parser.add_argument("--soar", action="store_true",
+                        help="Score each finished run and send anomalous ones to SOAR (dry-run)")
+    parser.add_argument("--live-response", action="store_true",
+                        help="With --soar, allow SOAR to terminate a process. Default is dry-run.")
     args = parser.parse_args()
-    run(interval=args.interval, stats_every=args.stats_every, log_dir=args.log_dir, duration=args.duration)
+    on_rows = None
+    bridge = None
+    if args.soar:
+        from hids.live import HostBridge
+        bridge = HostBridge(dry_run=not args.live_response)
+        on_rows = bridge.on_process_rows
+        print(f"SOAR host response: {'LIVE' if args.live_response else 'dry-run'}")
+    try:
+        run(interval=args.interval, stats_every=args.stats_every, log_dir=args.log_dir,
+            duration=args.duration, on_rows=on_rows)
+    finally:
+        if bridge is not None:
+            bridge.close()
 
 
 if __name__ == "__main__":

@@ -9,15 +9,17 @@ plus a multi-agent SOAR pipeline, with HIDS and dashboard stubs for later phases
 
 ```text
 Capstone/
-├── config/           # Shared paths (models, data, packages)
+├── config/           # Shared paths (single source of truth: config/paths.py)
 ├── data/             # Local datasets only (gitignored)
 ├── docs/             # Reports, feature contract, gameplan, ML freeze
-├── ml/               # Offline EDA / train / experiments
-├── models/           # sentinel_xgb_v2.pkl, label_encoder_v2.pkl, feature_columns_v2.pkl
-├── nids/             # Live capture + feature bridge + predict
-├── hids/             # Host monitoring stubs (Phase 5)
-├── soar/             # Multi-agent SOAR (Detection → Response → Report)
+├── ml/               # Offline dataset building / train / eval  (+ tests/)
+├── models/           # Frozen XGBoost v2/v3 artefacts (model, encoder, feature columns)
+├── nids/             # Live capture + feature bridge + predict  (+ tests/)
+├── hids/             # Host sensors, Isolation Forest scoring, SOAR bridge (+ tests/)
+│   └── dataset/      # Member 2: stealer simulator, feature engineering, dataset builder
+├── soar/             # Multi-agent SOAR (Detection → Response → Report)  (+ tests/)
 ├── dashboard/        # React UI placeholder (Phase 6)
+├── requirements.txt  # Single dependency list for the whole project
 └── README.md
 ```
 
@@ -25,8 +27,7 @@ Capstone/
 
 ```powershell
 cd c:\Capstone
-pip install -r requirements.txt
-pip install -r soar\requirements.txt
+pip install -r requirements.txt          # one list covers NIDS, ML, SOAR, HIDS
 
 # Frozen v2 model on one CSV row
 python -m nids.live_predict --row 0
@@ -37,6 +38,16 @@ python soar\demo_real_model.py
 # Agent golden demo (heuristics if CSV rows not attached)
 cd soar
 python demo_runner.py
+
+# HIDS: score a finished run, or run the sensors into SOAR (dry-run, no process kill)
+python -m hids.predict
+python -m hids.live --duration 600
+```
+
+## Tests
+
+```powershell
+python -m pytest nids/tests ml/tests hids/tests soar/tests -q
 ```
 
 ## Dataset citation

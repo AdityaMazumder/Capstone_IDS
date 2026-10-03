@@ -254,6 +254,19 @@ Columns: `timestamp` (epoch, ms), `time_iso`, `event_type` (`READ`, `MODIFY`, `D
 ```
 
 ### Member 2: Dataset & ML Integration (Week 3 Isolation Forest)
+Dataset tools live in `hids/dataset/` (`stealer_simulator.py`, `features.py`, `build_dataset.py`):
+- `python -m hids.dataset.build_dataset --split` turns `hids/logs/*.csv` into `hids_dataset.csv`,
+  one row per process run (`EXIT`/`END`), file activity joined by `(pid, create_time)`.
+- `python -m hids.dataset.stealer_simulator --runs N` generates safe, labelled `Stealer` runs
+  (disguised from `%TEMP%`, copies then shreds browser credential files, no exfiltration).
+- Runs are labelled `Stealer` only by exact `(pid, create_time)` from a simulator manifest.
+- Train the Isolation Forest on `Normal` rows; log-compress `lifetime_s` and standardise first.
+- Live scoring is `hids.predict.IsolationForestPredictor`. It returns `label` (`Normal` / `Stealer`),
+  `confidence`, `anomaly_score` (0–1, higher = more anomalous), `decision_score` and `threshold`.
+- `hids.live.HostBridge` sends anomalous EXIT/END runs to `orchestrator.process_host_event`, and sends
+  a non-owner credential-file read immediately (no ML label, so the host heuristic can alert while
+  the process is still alive). Default response is dry-run.
+
 Send combined process + file event + ML prediction to SOAR:
 ```python
 from soar.core.orchestrator import SentinelOrchestrator

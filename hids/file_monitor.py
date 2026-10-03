@@ -554,6 +554,7 @@ def run(
     log_dir: str = LOG_DIR,
     duration: float = 0.0,
     dedup_window: float = DEDUP_WINDOW,
+    on_rows: Optional[Callable[[List[Dict[str, Any]]], None]] = None,
 ) -> None:
     admin = is_admin()
     if mode == "auto":
@@ -620,6 +621,8 @@ def run(
                 owner = {1: "owner", 0: "NOT OWNER"}.get(r["accessor_is_owner"], "?")
                 print(f"  [{r['event_type']}] {r['process_name']} (pid {r['pid'] or '?'}, {owner}) -> {r['file_path']}")
             out.write(rows, now)
+            if on_rows and rows:
+                on_rows(rows)
             logged += len(rows)
             ticks += 1
 
@@ -666,6 +669,10 @@ def main() -> None:
                         help=f"Seconds to suppress repeats of the same pid/file/event (default {DEDUP_WINDOW})")
     parser.add_argument("--list-targets", action="store_true", help="Print the files that would be watched and exit")
     parser.add_argument("--remove-audit", action="store_true", help="Remove audit rules and disable File System auditing")
+    parser.add_argument("--soar", action="store_true",
+                        help="Send a non-owner credential access to SOAR immediately (dry-run)")
+    parser.add_argument("--live-response", action="store_true",
+                        help="With --soar, allow SOAR to terminate a process. Default is dry-run.")
     args = parser.parse_args()
 
     if args.list_targets:
@@ -675,8 +682,19 @@ def main() -> None:
     if args.remove_audit:
         remove_audit()
         return
-    run(mode=args.mode, poll_interval=args.poll_interval, log_dir=args.log_dir,
-        duration=args.duration, dedup_window=args.dedup_window)
+    on_rows = None
+    bridge = None
+    if args.soar:
+        from hids.live import HostBridge
+        bridge = HostBridge(dry_run=not args.live_response)
+        on_rows = bridge.on_file_rows
+        print(f"SOAR host response: {'LIVE' if args.live_response else 'dry-run'}")
+    try:
+        run(mode=args.mode, poll_interval=args.poll_interval, log_dir=args.log_dir,
+            duration=args.duration, dedup_window=args.dedup_window, on_rows=on_rows)
+    finally:
+        if bridge is not None:
+            bridge.close()
 
 
 if __name__ == "__main__":
