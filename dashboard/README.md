@@ -1,10 +1,33 @@
-# SentinelAI Dashboard (Phase 6)
+# SentinelAI Dashboard
 
-React + WebSocket UI will live here once NIDS live inference and SOAR incident JSON are stable.
+This is the front-end dashboard for the SentinelAI platform.
 
-**Do not start UI work until:**
-1. `nids/live_predict.py` works on CSV / lab flows
-2. `soar` Detection Agent loads `models/sentinel_xgb_v2.pkl` (**done** — package frozen; see `docs/ML_Package_v2.md`)
-3. Incident schema from `soar/core/schemas.py` is agreed with Member 4
+## Quick Start
 
-Planned stack: React, Recharts, Tailwind, WebSocket against `soar/api/server.py`.
+1. Start the SOAR backend API:
+```powershell
+cd C:\Capstone\soar
+pip install -r requirements.txt
+python main.py server
+```
+
+2. Start the dashboard dev server:
+```powershell
+cd C:\Capstone\dashboard
+npm install
+npm run dev
+```
+
+## Features
+
+- **Real-time Updates**: Live stream connected via WebSocket to the SOAR backend.
+- **Test Mode Supported**: When the backend runs in test mode, the UI reflects actions as "Simulated".
+- **Mock Mode**: Run entirely without a backend by setting `VITE_USE_MOCKS=true` in `.env`.
+- **Expert vs Simple View**: Toggle between plain English for normal users and raw technical logs for analysts.
+
+## Tech Stack
+- React 18, Vite, TypeScript
+- Tailwind CSS v4
+- TanStack Query
+- Recharts
+- dayjs & lucide-react

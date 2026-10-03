@@ -1,0 +1,32 @@
+[
+  {
+    "rule_id": "FW-001",
+    "ip_address": "45.33.32.156",
+    "direction": "in",
+    "block_timestamp": 1727800200,
+    "expiry_timestamp": 1727886600,
+    "reason": "SSH-Bruteforce detected from source",
+    "status": "SIMULATED",
+    "command_executed": "netsh advfirewall firewall add rule name=SentinelAI_FW-001 dir=in action=block remoteip=45.33.32.156"
+  },
+  {
+    "rule_id": "FW-002",
+    "ip_address": "185.220.101.34",
+    "direction": "in",
+    "block_timestamp": 1727800100,
+    "expiry_timestamp": 1727886500,
+    "reason": "DDoS attack detected from source",
+    "status": "ACTIVE",
+    "command_executed": "netsh advfirewall firewall add rule name=SentinelAI_FW-002 dir=in action=block remoteip=185.220.101.34"
+  },
+  {
+    "rule_id": "FW-003",
+    "ip_address": "91.240.118.172",
+    "direction": "in",
+    "block_timestamp": 1727790000,
+    "expiry_timestamp": null,
+    "reason": "Known malicious Botnet C2",
+    "status": "ACTIVE",
+    "command_executed": "netsh advfirewall firewall add rule name=SentinelAI_FW-003 dir=in action=block remoteip=91.240.118.172"
+  }
+]
